@@ -1,0 +1,33 @@
+# Node.js/NPM
+node_modules/
+npm-debug.log
+yarn-error.log
+.pnpm-store/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+*.swp
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# OS generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Compiled output
+/dist/
+/build/
+*.log
+*.sqlite3
+
+# Environment variables / secrets
+.env
+.env.*
