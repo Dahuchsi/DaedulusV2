@@ -1,4 +1,4 @@
-const { Message, User, Friendship } = require('../models');
+const { Message, User, Friendship, MessageLog } = require('../models'); // Import MessageLog
 const { Op } = require('sequelize');
 const multer = require('multer');
 const path = require('path');
@@ -138,9 +138,10 @@ async function getMessages(req, res) {
 }
 
 async function sendMessage(req, res) {
-    try {
-        const { recipient_id, content, message_type = 'text' } = req.body;
+    const { recipient_id, content, message_type = 'text' } = req.body;
+    const senderId = req.user.id; // Sender is the authenticated user
 
+    try {
         if (!content || !content.trim()) {
             return res.status(400).json({ error: 'Message content is required' });
         }
@@ -148,7 +149,7 @@ async function sendMessage(req, res) {
         // Verify friendship exists
         const friendship = await Friendship.findOne({
             where: {
-                user_id: req.user.id,
+                user_id: senderId,
                 friend_id: recipient_id,
                 status: 'accepted'
             }
@@ -163,7 +164,7 @@ async function sendMessage(req, res) {
         const actualMessageType = urlRegex.test(content.trim()) ? 'link' : message_type;
 
         const message = await Message.create({
-            sender_id: req.user.id,
+            sender_id: senderId,
             recipient_id,
             content: content.trim(),
             message_type: actualMessageType
@@ -176,6 +177,24 @@ async function sendMessage(req, res) {
                 attributes: ['id', 'username', 'avatar_url']
             }]
         });
+
+        // Log the message
+        const senderUser = await User.findByPk(senderId, { attributes: ['username'] });
+        const recipientUser = await User.findByPk(recipient_id, { attributes: ['username'] });
+
+        if (senderUser && recipientUser) {
+            await MessageLog.create({
+                sender_id: senderId,
+                sender_username: senderUser.username,
+                recipient_id: recipient_id,
+                recipient_username: recipientUser.username,
+                message_content: content.trim(),
+                message_type: actualMessageType
+            });
+        } else {
+            console.warn('Failed to log message: Sender or recipient user not found.');
+        }
+
 
         // Emit socket event
         const io = req.app.get('io');
@@ -206,6 +225,7 @@ function uploadFile(req, res) {
         }
 
         const { recipient_id, text } = req.body;
+        const senderId = req.user.id; // Sender is the authenticated user
 
         if (!recipient_id) {
             return res.status(400).json({ error: 'Recipient ID is required' });
@@ -215,7 +235,7 @@ function uploadFile(req, res) {
             // Verify friendship exists
             const friendship = await Friendship.findOne({
                 where: {
-                    user_id: req.user.id,
+                    user_id: senderId,
                     friend_id: recipient_id,
                     status: 'accepted'
                 }
@@ -244,7 +264,7 @@ function uploadFile(req, res) {
 
             // Create message with file URL and optional text
             const message = await Message.create({
-                sender_id: req.user.id,
+                sender_id: senderId,
                 recipient_id: recipient_id,
                 content: fileUrl,
                 message_type: messageType,
@@ -258,6 +278,24 @@ function uploadFile(req, res) {
                     attributes: ['id', 'username', 'avatar_url']
                 }]
             });
+
+            // Log the file message
+            const senderUser = await User.findByPk(senderId, { attributes: ['username'] });
+            const recipientUser = await User.findByPk(recipient_id, { attributes: ['username'] });
+
+            if (senderUser && recipientUser) {
+                await MessageLog.create({
+                    sender_id: senderId,
+                    sender_username: senderUser.username,
+                    recipient_id: recipient_id,
+                    recipient_username: recipientUser.username,
+                    message_content: fileUrl, // Log the URL as content
+                    message_type: messageType,
+                    // text field from original message is logged in content, or could add a separate log_text field
+                });
+            } else {
+                console.warn('Failed to log file message: Sender or recipient user not found.');
+            }
 
             // Emit socket event
             const io = req.app.get('io');
@@ -283,10 +321,10 @@ function uploadFile(req, res) {
 async function markAsRead(req, res) {
     try {
         const { friendId } = req.params;
-        const recipientId = req.user.id; // The user marking messages as read is the recipient 
+        const recipientId = req.user.id; // The user marking messages as read is the recipient
 
         // Find the messages that were sent by the friend and received by the current user, and are unread
-        const unreadMessages = await Message.findAll({ // Get unread messages to emit events for them 
+        const unreadMessages = await Message.findAll({
             where: {
                 sender_id: friendId,
                 recipient_id: recipientId,
@@ -305,15 +343,15 @@ async function markAsRead(req, res) {
             }
         );
 
-        // Emit socket event for each message that was marked as read 
+        // Emit socket event for each message that was marked as read
         const io = req.app.get('io');
         unreadMessages.forEach(message => {
-            // Emit to the sender (friendId) that their message (message.id) has been read by recipientId 
+            // Emit to the sender (friendId) that their message (message.id) has been read by recipientId
             io.to(`user_${message.sender_id}`).emit('message:read', {
                 messageId: message.id,
-                readerId: recipientId // The user who read the message 
+                readerId: recipientId
             });
-            console.log(`Emitted message:read for message ${message.id} to user ${message.sender_id}`); // Log for debugging 
+            console.log(`Emitted message:read for message ${message.id} to user ${message.sender_id}`);
         });
 
         res.json({ message: 'Messages marked as read' });

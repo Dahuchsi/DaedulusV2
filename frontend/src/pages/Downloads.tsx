@@ -33,7 +33,7 @@ const RealTimeProgressBar: React.FC<{
             <div
                 className="progress-fill"
                 style={{
-                    [cite_start]width: `${progress}%`, // Directly use the provided progress [cite: 4]
+                    width: `${progress}%`, // Directly use the provided progress
                     backgroundColor: progress > 0 ? '#2563eb' : '#e5e7eb',
                     transition: 'width 0.3s ease-out' // Smooth transition when progress updates 
                 }}

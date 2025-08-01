@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 
 interface UserStats {
@@ -30,21 +30,45 @@ interface User {
     display_phrase?: string;
 }
 
+interface SearchLogEntry {
+    id: string;
+    user_id: string;
+    username: string;
+    query: string;
+    search_date: string;
+    status: string;
+    result_count: number;
+    user?: { username: string; avatar_url?: string };
+}
+
+interface MessageLogEntry {
+    id: string;
+    sender_id: string;
+    sender_username: string;
+    recipient_id: string;
+    recipient_username: string;
+    message_content: string;
+    message_type: 'text' | 'image' | 'file' | 'link';
+    sent_at: string;
+}
+
+
 const Admin: React.FC = () => {
     const [stats, setStats] = useState<UserStats | null>(null);
     const [requests, setRequests] = useState<Request[]>([]);
-    const [allDownloads, setAllDownloads] = useState([]);
+    const [allDownloads, setAllDownloads] = useState<any[]>([]);
     const [users, setUsers] = useState<User[]>([]);
+    const [searchLogs, setSearchLogs] = useState<SearchLogEntry[]>([]);
+    const [messageLogs, setMessageLogs] = useState<MessageLogEntry[]>([]);
     const [activeTab, setActiveTab] = useState('overview');
     const [loading, setLoading] = useState(false);
 
     // Helper function to format dates safely
     const formatDate = (dateString: string | null | undefined): string => {
         if (!dateString) return 'Unknown';
-        
+
         try {
             const date = new Date(dateString);
-            // Check if date is valid
             if (isNaN(date.getTime())) {
                 return 'Unknown';
             }
@@ -58,15 +82,15 @@ const Admin: React.FC = () => {
     // Helper function to get relative time
     const getRelativeTime = (dateString: string | null | undefined): string => {
         if (!dateString) return 'Unknown';
-        
+
         try {
             const date = new Date(dateString);
             if (isNaN(date.getTime())) return 'Unknown';
-            
+
             const now = new Date();
             const diffMs = now.getTime() - date.getTime();
             const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-            
+
             if (diffDays === 0) return 'Today';
             if (diffDays === 1) return 'Yesterday';
             if (diffDays < 7) return `${diffDays} days ago`;
@@ -78,16 +102,24 @@ const Admin: React.FC = () => {
         }
     };
 
+    // Memoize the time formatters for performance
+    const memoizedFormatDate = useCallback(formatDate, []);
+    const memoizedGetRelativeTime = useCallback(getRelativeTime, []);
+
     useEffect(() => {
         fetchStats();
         fetchRequests();
         fetchAllDownloads();
     }, []);
 
-    // Fetch users when Users tab is selected
+    // Fetch users, search logs, message logs when respective tabs are selected
     useEffect(() => {
         if (activeTab === 'users') {
             fetchUsers();
+        } else if (activeTab === 'search_logs') {
+            fetchSearchLogs();
+        } else if (activeTab === 'message_logs') {
+            fetchMessageLogs();
         }
     }, [activeTab]);
 
@@ -122,7 +154,12 @@ const Admin: React.FC = () => {
         setLoading(true);
         try {
             const response = await api.get('/admin/users');
-            setUsers(response.data);
+            const usersWithParsedDates = response.data.map((user: User) => ({
+                ...user,
+                created_at: user.created_at,
+                updated_at: user.updated_at
+            }));
+            setUsers(usersWithParsedDates);
             console.log('Fetched users:', response.data);
         } catch (error) {
             console.error('Failed to fetch users:', error);
@@ -132,18 +169,47 @@ const Admin: React.FC = () => {
         }
     };
 
+    const fetchSearchLogs = async (userId?: string) => {
+        setLoading(true);
+        try {
+            const url = userId ? `/admin/logs/search?userId=${userId}` : '/admin/logs/search';
+            const response = await api.get(url);
+            setSearchLogs(response.data);
+        }
+         catch (error) {
+            console.error('Failed to fetch search logs:', error);
+            alert('Failed to fetch search logs');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchMessageLogs = async (userId?: string) => {
+        setLoading(true);
+        try {
+            const url = userId ? `/admin/logs/messages?userId=${userId}` : '/admin/logs/messages';
+            const response = await api.get(url);
+            setMessageLogs(response.data);
+        } catch (error) {
+            console.error('Failed to fetch message logs:', error);
+            alert('Failed to fetch message logs');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleDeleteUser = async (userId: string, username: string) => {
         const confirmDelete = window.confirm(
             `Are you sure you want to delete user "${username}"? This action cannot be undone and will remove all their data including downloads, messages, and requests.`
         );
-        
+
         if (!confirmDelete) return;
 
         try {
             await api.delete(`/admin/users/${userId}`);
             alert(`User "${username}" deleted successfully`);
-            fetchUsers(); // Refresh the users list
-            fetchStats(); // Refresh stats
+            fetchUsers();
+            fetchStats();
         } catch (error) {
             console.error('Failed to delete user:', error);
             alert('Failed to delete user');
@@ -172,34 +238,90 @@ const Admin: React.FC = () => {
         }
     };
 
+    // NEW: Function to handle changing user password
+    const handleChangeUserPassword = async (userId: string, username: string) => {
+        const newPassword = prompt(`Enter new password for user "${username}":`);
+
+        if (!newPassword) {
+            alert('Password change cancelled or empty password provided.');
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            alert('New password must be at least 6 characters long.');
+            return;
+        }
+
+        if (!window.confirm(`Are you sure you want to change the password for "${username}"?`)) {
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await api.put(`/admin/users/${userId}/password`, { newPassword });
+            alert(`Password for user "${username}" updated successfully!`);
+        } catch (error: any) {
+            console.error('Failed to change password:', error);
+            alert(`Failed to change password: ${error.response?.data?.error || error.message}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Helper for message content formatting for logs
+    const formatMessageLogContent = (log: MessageLogEntry) => {
+        switch (log.message_type) {
+            case 'image':
+                return `🖼️ Image: ${log.message_content.split('/').pop()}`;
+            case 'file':
+                return `📎 File: ${log.message_content.split('/').pop()}`;
+            case 'link':
+                return `🔗 Link: ${log.message_content}`;
+            default:
+                return log.message_content;
+        }
+    };
+
     return (
-        <div className="admin-page">
+        <div className="admin-page main-content">
             <h1>Admin Dashboard - Dahuchsi</h1>
 
             <div className="admin-tabs">
-                <button 
+                <button
                     className={activeTab === 'overview' ? 'active' : ''}
                     onClick={() => setActiveTab('overview')}
                 >
                     Overview
                 </button>
-                <button 
+                <button
                     className={activeTab === 'requests' ? 'active' : ''}
                     onClick={() => setActiveTab('requests')}
                 >
                     Requests ({stats?.pending_requests || 0})
                 </button>
-                <button 
+                <button
                     className={activeTab === 'downloads' ? 'active' : ''}
                     onClick={() => setActiveTab('downloads')}
                 >
                     All Downloads
                 </button>
-                <button 
+                <button
                     className={activeTab === 'users' ? 'active' : ''}
                     onClick={() => setActiveTab('users')}
                 >
                     Users ({stats?.total_users || 0})
+                </button>
+                <button
+                    className={activeTab === 'search_logs' ? 'active' : ''}
+                    onClick={() => setActiveTab('search_logs')}
+                >
+                    Search Logs
+                </button>
+                <button
+                    className={activeTab === 'message_logs' ? 'active' : ''}
+                    onClick={() => setActiveTab('message_logs')}
+                >
+                    Message Logs
                 </button>
             </div>
 
@@ -241,19 +363,19 @@ const Admin: React.FC = () => {
                                 <div className="request-info">
                                     <h4>{request.search_query}</h4>
                                     <p>From: {request.username}</p>
-                                    <p>Requested: {formatDate(request.created_at)}</p>
+                                    <p>Requested: {memoizedFormatDate(request.created_at)}</p>
                                     {request.torrent_info && (
                                         <p>Torrent: {request.torrent_info.name}</p>
                                     )}
                                 </div>
                                 <div className="request-actions">
-                                    <button 
+                                    <button
                                         onClick={() => handleRequestAction(request.id, 'fulfill')}
                                         className="fulfill-btn"
                                     >
                                         Fulfill
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={() => handleRequestAction(request.id, 'reject')}
                                         className="reject-btn"
                                     >
@@ -291,7 +413,7 @@ const Admin: React.FC = () => {
                                                 {download.status}
                                             </span>
                                         </td>
-                                        <td>{formatDate(download.created_at)}</td>
+                                        <td>{memoizedFormatDate(download.created_at)}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -326,8 +448,8 @@ const Admin: React.FC = () => {
                                                 <td>
                                                     <div className="user-avatar">
                                                         {user.avatar_url ? (
-                                                            <img 
-                                                                src={user.avatar_url} 
+                                                            <img
+                                                                src={user.avatar_url.startsWith('/') ? user.avatar_url : `/uploads/avatars/${user.avatar_url.split('/').pop()}`}
                                                                 alt={user.username}
                                                                 style={{
                                                                     width: '32px',
@@ -335,9 +457,10 @@ const Admin: React.FC = () => {
                                                                     borderRadius: '50%',
                                                                     objectFit: 'cover'
                                                                 }}
+                                                                onError={(e) => { e.currentTarget.src = '/uploads/avatars/default.png'; }}
                                                             />
                                                         ) : (
-                                                            <div 
+                                                            <div
                                                                 className="avatar-placeholder"
                                                                 style={{
                                                                     width: '32px',
@@ -375,37 +498,51 @@ const Admin: React.FC = () => {
                                                 </td>
                                                 <td>
                                                     <div>
-                                                        <div>{formatDate(user.created_at)}</div>
+                                                        <div>{memoizedFormatDate(user.created_at)}</div>
                                                         <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                                                            {getRelativeTime(user.created_at)}
+                                                            {memoizedGetRelativeTime(user.created_at)}
                                                         </div>
                                                     </div>
                                                 </td>
                                                 <td>
                                                     <div>
-                                                        <div>{formatDate(user.updated_at)}</div>
+                                                        <div>{memoizedFormatDate(user.updated_at)}</div>
                                                         <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                                                            {getRelativeTime(user.updated_at)}
+                                                            {memoizedGetRelativeTime(user.updated_at)}
                                                         </div>
                                                     </div>
                                                 </td>
                                                 <td>
                                                     {!user.is_admin && (
-                                                        <button
-                                                            onClick={() => handleDeleteUser(user.id, user.username)}
-                                                            className="delete-user-btn"
-                                                            style={{
-                                                                backgroundColor: '#ef4444',
-                                                                color: 'white',
-                                                                border: 'none',
-                                                                padding: '0.25rem 0.5rem',
-                                                                borderRadius: '0.25rem',
-                                                                fontSize: '0.8rem',
-                                                                cursor: 'pointer'
-                                                            }}
-                                                        >
-                                                            Delete
-                                                        </button>
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleChangeUserPassword(user.id, user.username)}
+                                                                className="btn-primary"
+                                                                style={{
+                                                                    marginRight: '0.5rem',
+                                                                    backgroundColor: '#10b981',
+                                                                    padding: '0.25rem 0.5rem',
+                                                                    fontSize: '0.8rem',
+                                                                }}
+                                                            >
+                                                                Change Password
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteUser(user.id, user.username)}
+                                                                className="delete-user-btn"
+                                                                style={{
+                                                                    backgroundColor: '#ef4444',
+                                                                    color: 'white',
+                                                                    border: 'none',
+                                                                    padding: '0.25rem 0.5rem',
+                                                                    borderRadius: '0.25rem',
+                                                                    fontSize: '0.8rem',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </>
                                                     )}
                                                 </td>
                                             </tr>
@@ -419,6 +556,122 @@ const Admin: React.FC = () => {
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'search_logs' && (
+                <div className="search-logs-section">
+                    <h2>Search Logs</h2>
+                    {loading ? (
+                        <div className="loading">Loading search logs...</div>
+                    ) : (
+                        <div className="search-logs-table downloads-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>User</th>
+                                        <th>Query</th>
+                                        <th>Date</th>
+                                        <th>Status</th>
+                                        <th>Results</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {searchLogs.length > 0 ? (
+                                        searchLogs.map(log => (
+                                            <tr key={log.id}>
+                                                <td>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        {log.user?.avatar_url ? (
+                                                            <img
+                                                                src={log.user.avatar_url.startsWith('/') ? log.user.avatar_url : `/uploads/avatars/${log.user.avatar_url.split('/').pop()}`}
+                                                                alt={log.username}
+                                                                style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }}
+                                                                onError={(e) => { e.currentTarget.src = '/uploads/avatars/default.png'; }}
+                                                            />
+                                                        ) : (
+                                                            <div
+                                                                className="avatar-placeholder"
+                                                                style={{
+                                                                    width: '24px',
+                                                                    height: '24px',
+                                                                    borderRadius: '50%',
+                                                                    backgroundColor: '#2563eb',
+                                                                    color: 'white',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    fontSize: '0.7rem',
+                                                                    fontWeight: '600'
+                                                                }}
+                                                            >
+                                                                {log.username[0]?.toUpperCase()}
+                                                            </div>
+                                                        )}
+                                                        {log.username}
+                                                    </div>
+                                                </td>
+                                                <td>{log.query}</td>
+                                                <td>{memoizedFormatDate(log.search_date)}</td>
+                                                <td><span className={`status ${log.status === 'success' ? 'completed' : log.status === 'error' ? 'failed' : 'queued'}`}>{log.status}</span></td>
+                                                <td>{log.result_count}</td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>No search logs found.</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'message_logs' && (
+                <div className="message-logs-section">
+                    <h2>Message Logs (Conversational Format)</h2>
+                    {loading ? (
+                        <div className="loading">Loading message logs...</div>
+                    ) : (
+                        <div className="message-logs-conversations">
+                            {(() => {
+                                const conversationsMap = new Map<string, MessageLogEntry[]>();
+                                messageLogs.forEach(log => {
+                                    const convoKey = [log.sender_id, log.recipient_id].sort().join('-');
+                                    if (!conversationsMap.has(convoKey)) {
+                                        conversationsMap.set(convoKey, []);
+                                    }
+                                    conversationsMap.get(convoKey)?.push(log);
+                                });
+
+                                return Array.from(conversationsMap.entries()).map(([key, logs]) => (
+                                    <div key={key} className="message-log-conversation-group card">
+                                        <h3>Conversation between {logs[0].sender_username} and {logs[0].recipient_username}</h3>
+                                        <div className="message-log-entries">
+                                            {logs.map(log => (
+                                                <div
+                                                    key={log.id}
+                                                    className={`message-log-item ${log.sender_id === user?.id ? 'sent' : 'received'}`}
+                                                >
+                                                    <div className="message-log-content">
+                                                        <strong>{log.sender_username}:</strong> {formatMessageLogContent(log)}
+                                                    </div>
+                                                    <div className="message-log-time">
+                                                        {memoizedFormatDate(log.sent_at)} {new Date(log.sent_at).toLocaleTimeString()}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ));
+                            })()}
+                            {messageLogs.length === 0 && (
+                                <p style={{ textAlign: 'center', padding: '2rem' }}>No message logs found.</p>
+                            )}
                         </div>
                     )}
                 </div>

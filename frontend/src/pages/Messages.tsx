@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
-import '../styles/Messages.css';
+import '../styles/Messages.css'; // Ensure this is imported
 
 interface Message {
     id: string;
@@ -92,18 +92,21 @@ const Messages: React.FC = () => {
     }
     }, []);
 
-    // Fetch messages and mark as read
+    // Fetch messages and mark as read (modified to use setMessages for mobile transition)
     const fetchMessages = useCallback(async (friendId: string) => {
-    try {
-    const response = await api.get(`/messages/${friendId}`);
-    setMessages(Array.isArray(response.data) ? response.data : []);
-    setSelectedConversation(friendId);
-    // Mark as read after fetching
-    await api.put(`/messages/${friendId}/read`);
-    await fetchConversations();
-    } catch (error) {
-    console.error('Failed to fetch messages:', error);
-    }
+        try {
+            const response = await api.get(`/messages/${friendId}`);
+            setMessages(Array.isArray(response.data) ? response.data : []);
+            setSelectedConversation(friendId);
+            await api.put(`/messages/${friendId}/read`);
+            await fetchConversations();
+            // Ensure scroll to bottom on new conversation load
+            setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 0); // Use 0 timeout to push to next event loop cycle
+        } catch (error) {
+            console.error('Failed to fetch messages:', error);
+        }
     }, [fetchConversations]);
 
     // Handle new incoming message
@@ -115,7 +118,7 @@ const Messages: React.FC = () => {
     return [...prev, message];
     });
     // Mark as read if the message is for the open conversation
-    api.put(`/messages/${selectedConversation}/read`).then(fetchConversations);
+    api.put(`/messages/${selectedConversation}/read').then(fetchConversations);
     } else {
     fetchConversations();
     }
@@ -172,10 +175,17 @@ const Messages: React.FC = () => {
     fetchConversations();
     }, [fetchConversations]);
 
-    // Auto-scroll to bottom
+    // Auto-scroll to bottom (ensure this works reliably)
     useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+        // Only scroll if it's an actual message addition, not initial load potentially
+        // A small delay often helps ensure content is rendered before scrolling
+        if (messages.length > 0) { // Only scroll if there are messages
+            const timer = setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); // Use block: 'end'
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [messages]); // Dependency on messages array
 
     // Handle typing indication
     const handleTyping = () => {
@@ -202,18 +212,11 @@ const Messages: React.FC = () => {
 
     // Reset mobile viewport after sending
     const resetMobileViewport = () => {
-    if (isMobile && messageInputRef.current) {
-    messageInputRef.current.blur();
-    setTimeout(() => {
-    window.scrollTo(0, 0);
-    const body = document.body;
-    const originalOverflow = body.style.overflow;
-    body.style.overflow = 'hidden';
-    setTimeout(() => {
-    body.style.overflow = originalOverflow;
-    }, 10);
-    }, 100);
-    }
+        if (isMobile && messageInputRef.current) {
+            messageInputRef.current.blur();
+            // Removed window.scrollTo(0, 0) and related overflow logic
+            // as it was causing scroll to top. messagesEndRef handles scrolling.
+        }
     };
 
     // Send message (text, file, or both)
@@ -413,203 +416,234 @@ const Messages: React.FC = () => {
     ? { username: selectedFriend.friend_username, avatar_url: selectedFriend.friend_avatar }
     : null;
 
+    // Back function for mobile
+    const handleBackToConversations = useCallback(() => {
+        setSelectedConversation(null);
+        setMessages([]); // Clear messages when going back
+    }, []);
+
+
     return (
-    <div className={`messages-page ${isMobile ? 'mobile' : ''}`}>
-    {!isMobile || !selectedConversation ? (
-    <div className="conversations-sidebar">
-    <h2>Conversations</h2>
-    <div className={`conversations-list ${isMobile ? 'mobile-grid' : ''}`}>
-    {conversations.map(conv => (
-    <div
-    key={conv.friend_id}
-    className={`conversation-item ${selectedConversation === conv.friend_id ? 'active' : ''} ${isMobile ? 'mobile-conversation' : ''}`}
-    onClick={() => fetchMessages(conv.friend_id)}
-    >
-    <div className="conversation-avatar">
-    <img
-    src={getAvatar(conv.friend_avatar, conv.friend_username)}
-    alt={conv.friend_username}
-    className="avatar-circle"
-    onError={e => (e.currentTarget.src = DEFAULT_AVATAR)}
-    />
-    </div>
-    <div className="conversation-info">
-    <h4>{conv.friend_username}</h4>
-    {!isMobile && conv.last_message && (
-    <p className="last-message">
-    {conv.last_message.message_type === 'text'
-    ? conv.last_message.content
-    : `📎 ${conv.last_message.message_type}`
-    }
-    </p>
-    )}
-    </div>
-    {conv.unread_count > 0 && selectedConversation !== conv.friend_id && (
-    <span className="unread-badge">{conv.unread_count}</span>
-    )}
-    </div>
-    ))}
-    </div>
-    </div>
-    ) : null}
+        <div className={`messages-page ${isMobile ? 'mobile' : ''}`}>
+            {/* Conditional rendering for mobile conversation list */}
+            {(!isMobile || !selectedConversation) && ( /* Show sidebar if not mobile OR if mobile but no conversation selected */
+                <div className="conversations-sidebar">
+                    <h2>Conversations</h2>
+                    <div className={`conversations-list ${isMobile ? 'mobile-grid' : ''}`}>
+                        {conversations.map(conv => (
+                            <div
+                                key={conv.friend_id}
+                                className={`conversation-item ${selectedConversation === conv.friend_id ? 'active' : ''} ${isMobile ? 'mobile-conversation' : ''}`}
+                                onClick={() => fetchMessages(conv.friend_id)}
+                            >
+                                <div className="conversation-avatar">
+                                    <img
+                                        src={getAvatar(conv.friend_avatar, conv.friend_username)}
+                                        alt={conv.friend_username}
+                                        className="avatar-circle"
+                                        onError={e => (e.currentTarget.src = DEFAULT_AVATAR)}
+                                    />
+                                </div>
+                                <div className="conversation-info">
+                                    <h4>{conv.friend_username}</h4>
+                                    {!isMobile && conv.last_message && (
+                                        <p className="last-message">
+                                            {conv.last_message.message_type === 'text'
+                                                ? conv.last_message.content
+                                                : `📎 ${conv.last_message.message_type}`
+                                            }
+                                        </p>
+                                    )}
+                                </div>
+                                {conv.unread_count > 0 && selectedConversation !== conv.friend_id && (
+                                    <span className="unread-badge">{conv.unread_count}</span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
-    <div className="messages-main">
-    {selectedConversation ? (
-    <>
-    <div className="messages-header">
-    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-    {isMobile && selectedFriend && (
-    <>
-    <img
-    src={getAvatar(selectedFriend.friend_avatar, selectedFriend.friend_username)}
-    alt={selectedFriend.friend_username}
-    style={{
-    width: 32,
-    height: 32,
-    borderRadius: '50%',
-    objectFit: 'cover',
-    marginRight: 8
-    }}
-    onError={e => (e.currentTarget.src = DEFAULT_AVATAR)}
-    />
-    <h2 style={{ margin: 0 }}>{selectedFriend.friend_username}</h2>
-    </>
-    )}
-    {!isMobile && <h2 style={{ margin: 0 }}>{selectedFriend?.friend_username}</h2>}
-    </div>
-    {socket && socket.connected && (
-    <span style={{ color: '#28a745', fontSize: '0.8rem' }}>● Live messaging</span>
-    )}
-    </div>
+            {/* Conditional rendering for mobile chat view */}
+            {selectedConversation && ( /* Show messages-main if a conversation is selected */
+                <div className="messages-main">
+                    <div className="messages-header">
+                        {isMobile && ( // Back button for mobile
+                            <button
+                                onClick={handleBackToConversations}
+                                className="btn-back-to-conversations"
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '1.5rem',
+                                    marginRight: '1rem',
+                                    padding: 0,
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                ←
+                            </button>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            {/* Friend's avatar and username in header */}
+                            {selectedFriend && (
+                                <>
+                                <img
+                                    src={getAvatar(selectedFriend.friend_avatar, selectedFriend.friend_username)}
+                                    alt={selectedFriend.friend_username}
+                                    style={{
+                                    width: 32,
+                                    height: 32,
+                                    borderRadius: '50%',
+                                    objectFit: 'cover',
+                                    marginRight: 8
+                                    }}
+                                    onError={e => (e.currentTarget.src = DEFAULT_AVATAR)}
+                                />
+                                <h2 style={{ margin: 0 }}>{selectedFriend.friend_username}</h2>
+                                </>
+                            )}
+                        </div>
+                        {socket && socket.connected && (
+                            <span style={{ color: '#28a745', fontSize: '0.8rem' }}>● Live messaging</span>
+                        )}
+                    </div>
 
-    <div className="messages-list">
-    {messages.map((message, idx) => (
-    <div
-    key={message.id}
-    className={`message ${message.sender_id === user?.id ? 'sent' : 'received'}`}
-    style={{ position: 'relative', marginBottom: message.id === lastReadMessageId ? 32 : 8 }}
-    >
-    <div className="message-content">
-    {formatMessageContent(message)}
-    {message.text && (
-    <div style={{ marginTop: 4, fontSize: 14 }}>{message.text}</div>
-    )}
-    </div>
-    <div className="message-time">
-    {formatMessageTime(message.created_at)}
-    </div>
-    {/* Read receipt: show other user's profile pic under the last read message */}
-    {message.id === lastReadMessageId && otherUser && (
-    <div style={{
-    position: 'absolute',
-    right: 0,
-    bottom: -26,
-    display: 'flex',
-    alignItems: 'center',
-    zIndex: 1
-    }}>
-    <img
-    src={getAvatar(otherUser.avatar_url, otherUser.username)}
-    alt={otherUser.username}
-    style={{
-    width: 18,
-    height: 18,
-    borderRadius: '50%',
-    border: '2px solid #fff',
-    boxShadow: '0 0 2px rgba(0,0,0,0.2)',
-    background: '#fafafa'
-    }}
-    title={`Read by ${otherUser.username}`}
-    onError={e => (e.currentTarget.src = DEFAULT_AVATAR)}
-    />
-    </div>
-    )}
-    </div>
-    ))}
+                    <div className="messages-list">
+                        {messages.map((message, idx) => (
+                            <div
+                            key={message.id}
+                            className={`message ${message.sender_id === user?.id ? 'sent' : 'received'}`}
+                            style={{ position: 'relative', marginBottom: message.id === lastReadMessageId ? 32 : 8 }}
+                            >
+                            <div className="message-content">
+                                {formatMessageContent(message)}
+                                {message.text && (
+                                <div style={{ marginTop: 4, fontSize: 14 }}>{message.text}</div>
+                                )}
+                            </div>
+                            <div className="message-time">
+                                {formatMessageTime(message.created_at)}
+                            </div>
+                            {/* Read receipt: show other user's profile pic under the last read message */}
+                            {message.id === lastReadMessageId && otherUser && (
+                            <div style={{
+                                position: 'absolute',
+                                right: 0,
+                                bottom: -26,
+                                display: 'flex',
+                                alignItems: 'center',
+                                zIndex: 1
+                            }}>
+                                <img
+                                src={getAvatar(otherUser.avatar_url, otherUser.username)}
+                                alt={otherUser.username}
+                                style={{
+                                    width: 18,
+                                    height: 18,
+                                    borderRadius: '50%',
+                                    border: '2px solid #fff',
+                                    boxShadow: '0 0 2px rgba(0,0,0,0.2)',
+                                    background: '#fafafa'
+                                }}
+                                title={`Read by ${otherUser.username}`}
+                                onError={e => (e.currentTarget.src = DEFAULT_AVATAR)}
+                                />
+                            </div>
+                            )}
+                            </div>
+                        ))}
 
-    {typingUsers.size > 0 && (
-    <div className="typing-indicator">
-    <div className="typing-dots">
-    <span></span>
-    <span></span>
-    <span></span>
-    </div>
-    <span className="typing-text">
-    {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
-    </span>
-    </div>
-    )}
+                        {typingUsers.size > 0 && (
+                            <div className="typing-indicator">
+                            <div className="typing-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                            <span className="typing-text">
+                                {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
+                            </span>
+                            </div>
+                        )}
 
-    <div ref={messagesEndRef} />
-    </div>
+                        <div ref={messagesEndRef} />
+                    </div>
 
-    <form onSubmit={sendMessage} className="message-input">
-    {selectedFile && (
-    <div className="file-preview" style={{ marginRight: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-    {selectedFile.type.startsWith('image/') ? (
-    <img src={filePreviewUrl} alt="preview" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 8 }} />
-    ) : selectedFile.type.startsWith('video/') ? (
-    <video src={filePreviewUrl} width={48} height={48} style={{ borderRadius: 8 }} />
-    ) : (
-    <span style={{ fontSize: 14 }}>{selectedFile.name}</span>
-    )}
-    <button type="button" onClick={() => { setSelectedFile(null); setFilePreviewUrl(''); }} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18 }}>✖</button>
-    </div>
-    )}
+                    <form onSubmit={sendMessage} className="message-input">
+                        {selectedFile && (
+                            <div className="file-preview">
+                                {selectedFile.type.startsWith('image/') ? (
+                                <img src={filePreviewUrl} alt="preview" />
+                                ) : selectedFile.type.startsWith('video/') ? (
+                                <video src={filePreviewUrl} controls />
+                                ) : (
+                                <span style={{ fontSize: 14 }}>{selectedFile.name}</span>
+                                )}
+                                <button type="button" onClick={() => { setSelectedFile(null); setFilePreviewUrl(''); }} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18 }}>✖</button>
+                            </div>
+                        )}
 
-    <input
-    type="file"
-    ref={fileInputRef}
-    onChange={handleFileSelect}
-    accept="image/*,video/*,.gif,.pdf,.doc,.docx,.txt"
-    style={{ display: 'none' }}
-    />
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileSelect}
+                            accept="image/*,video/*,.gif,.pdf,.doc,.docx,.txt"
+                            style={{ display: 'none' }}
+                        />
 
-    <button
-    type="button"
-    onClick={() => fileInputRef.current?.click()}
-    disabled={uploadingFile}
-    className="file-upload-btn"
-    >
-    {uploadingFile ? '⏳' : '📎'}
-    </button>
+                        <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={uploadingFile}
+                            className="file-upload-btn"
+                        >
+                            {uploadingFile ? '⏳' : '📎'}
+                        </button>
 
-    <input
-    ref={messageInputRef}
-    type="text"
-    value={newMessage}
-    onChange={(e) => {
-    setNewMessage(e.target.value);
-    handleTyping();
-    }}
-    placeholder="Type a message..."
-    disabled={uploadingFile}
-    style={{
-    fontSize: isMobile ? '16px' : '1rem'
-    }}
-    />
-    <button type="submit" disabled={uploadingFile}>
-    Send
-    </button>
-    </form>
-    {sendError && (
-    <div style={{ color: 'red', marginTop: 8, textAlign: 'center' }}>
-    {sendError}
-    </div>
-    )}
-    </>
-    ) : (
-    <div className="no-conversation">
-    <div style={{ textAlign: 'center', marginTop: isMobile ? '60vh' : '40vh' }}>
-    <p>Select a conversation to start messaging</p>
-    <p style={{ fontSize: '0.9rem', color: '#6b7280', marginTop: '0.5rem' }}>
-    Socket status: {socket && socket.connected ? '🟢 Connected' : '🔴 Disconnected'}
-    </p>
-    </div>
-    </div>
-    )}
-    </div>
-    </div>
+                        <input
+                            ref={messageInputRef}
+                            type="text"
+                            value={newMessage}
+                            onChange={(e) => {
+                            setNewMessage(e.target.value);
+                            handleTyping();
+                            }}
+                            placeholder="Type a message..."
+                            disabled={uploadingFile}
+                            style={{
+                            fontSize: isMobile ? '16px' : '1rem'
+                            }}
+                        />
+                        <button type="submit" disabled={uploadingFile}>
+                            Send
+                        </button>
+                    </form>
+                    {sendError && (
+                    <div style={{ color: 'red', marginTop: 8, textAlign: 'center' }}>
+                        {sendError}
+                    </div>
+                    )}
+                </div>
+            )}
+
+            {/* This block is only shown if not mobile AND no conversation selected.
+                It can be removed or restructured if you want the "no conversation selected"
+                message to appear differently on desktop, or if the conversations sidebar
+                is always visible on desktop.
+            */}
+            {!selectedConversation && !isMobile && (
+                <div className="no-conversation">
+                    <div style={{ textAlign: 'center', marginTop: '40vh' }}>
+                        <p>Select a conversation to start messaging</p>
+                        <p style={{ fontSize: '0.9rem', color: '#6b7280', marginTop: '0.5rem' }}>
+                            Socket status: {socket && socket.connected ? '🟢 Connected' : '🔴 Disconnected'}
+                        </p>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 };
 

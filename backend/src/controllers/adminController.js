@@ -1,19 +1,13 @@
-const { User, Download, Request, Message } = require('../models');
-const sequelize = require('../config/database'); // Keep for transactions
+const { User, Download, Request, SearchLog, MessageLog } = require('../models');
 const { Op } = require('sequelize');
+const { hashPassword } = require('../utils/passwordUtils'); // Import password utility
 
 const adminController = {
     async getStats(req, res) {
         try {
-            const totalUsers = await User.count({ where: { is_admin: false } });
-            const activeUsers = await User.count({
-                where: {
-                    is_admin: false,
-                    updated_at: {
-                        [Op.gte]: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
-                    }
-                }
-            });
+            const totalUsers = await User.count();
+            const activeUsers = await User.count(); // Placeholder for actual active user logic
+
             const totalDownloads = await Download.count();
             const pendingRequests = await Request.count({ where: { status: 'pending' } });
 
@@ -24,72 +18,49 @@ const adminController = {
                 pending_requests: pendingRequests
             });
         } catch (error) {
-            console.error('Get stats error:', error);
+            console.error('Failed to get admin stats:', error);
             res.status(500).json({ error: 'Failed to fetch stats' });
         }
     },
 
     async getAllDownloads(req, res) {
         try {
-            const { limit = 100, offset = 0 } = req.query;
             const downloads = await Download.findAll({
-                include: [{
-                    model: User,
-                    as: 'user', // ADDED 'as' ALIAS: ASSUMES Download.belongsTo(User, { as: 'user' })
-                    attributes: ['id', 'username', 'email']
-                }],
-                order: [['created_at', 'DESC']],
-                limit: parseInt(limit),
-                offset: parseInt(offset)
+                include: [{ model: User, as: 'user', attributes: ['username'] }],
+                order: [['created_at', 'DESC']]
             });
-
-            const formattedDownloads = downloads.map(download => ({
-                ...download.toJSON(),
-                username: download.user?.username || 'Unknown' // Use the alias here
-            }));
-
-            res.json(formattedDownloads);
+            res.json(downloads);
         } catch (error) {
-            console.error('Get all downloads error:', error);
-            res.status(500).json({ error: 'Failed to fetch downloads' });
+            console.error('Failed to get all downloads:', error);
+            res.status(500).json({ error: 'Failed to fetch all downloads' });
         }
     },
 
     async getUsers(req, res) {
         try {
             const users = await User.findAll({
-                where: { is_admin: false },
                 attributes: { exclude: ['password_hash'] },
-                order: [['created_at', 'DESC']]
+                order: [['created_at', 'ASC']]
             });
-
             res.json(users);
         } catch (error) {
-            console.error('Get users error:', error);
+            console.error('Failed to get users:', error);
             res.status(500).json({ error: 'Failed to fetch users' });
         }
     },
 
-    async getRequests(req, res) {
+    async deleteUser(req, res) {
         try {
-            const requests = await Request.findAll({
-                include: [{
-                    model: User,
-                    as: 'user', // ADDED 'as' ALIAS: ASSUMES Request.belongsTo(User, { as: 'user' })
-                    attributes: ['id', 'username', 'email']
-                }],
-                order: [['created_at', 'DESC']]
-            });
-
-            const formattedRequests = requests.map(request => ({
-                ...request.toJSON(),
-                username: request.user?.username || 'Unknown' // Use the alias here
-            }));
-
-            res.json(formattedRequests);
+            const { id } = req.params;
+            const user = await User.findByPk(id);
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+            await user.destroy();
+            res.json({ message: 'User deleted successfully' });
         } catch (error) {
-            console.error('Get requests error:', error);
-            res.status(500).json({ error: 'Failed to fetch requests' });
+            console.error('Failed to delete user:', error);
+            res.status(500).json({ error: 'Failed to delete user' });
         }
     },
 
@@ -97,134 +68,97 @@ const adminController = {
         try {
             const { id } = req.params;
             const { status } = req.body;
-
-            if (!['fulfilled', 'rejected'].includes(status)) {
-                return res.status(400).json({ error: 'Invalid status' });
-            }
-
             const request = await Request.findByPk(id);
-
             if (!request) {
                 return res.status(404).json({ error: 'Request not found' });
             }
-
             await request.update({ status });
-
-            // Send message to user about request status
-            const message = status === 'fulfilled'
-                ? `Your request for "${request.search_query}" has been fulfilled!`
-                : `Your request for "${request.search_query}" has been rejected.`;
-
-            await Message.create({
-                sender_id: req.user.id,
-                recipient_id: request.user_id,
-                content: message,
-                message_type: 'text'
-            });
-
             res.json(request);
         } catch (error) {
-            console.error('Update request error:', error);
+            console.error('Failed to update request:', error);
             res.status(500).json({ error: 'Failed to update request' });
         }
     },
 
     async broadcastMessage(req, res) {
-        try {
-            const { message } = req.body;
+        const io = req.app.get('io');
+        const { message } = req.body;
 
-            if (!message || !message.trim()) {
-                return res.status(400).json({ error: 'Message is required' });
+        if (!message) {
+            return res.status(400).json({ error: 'Broadcast message content is required' });
+        }
+
+        io.emit('message:broadcast', { from: 'Admin', content: message });
+        res.json({ message: 'Message broadcasted successfully (to connected clients)' });
+    },
+
+    async changeUserPassword(req, res) {
+        try {
+            const { id } = req.params; // User ID whose password is being changed
+            const { newPassword } = req.body; // The new password for the user
+
+            if (!newPassword || newPassword.length < 6) { // Basic validation
+                return res.status(400).json({ error: 'New password must be at least 6 characters long' });
             }
 
-            // Get all non-admin users
-            const users = await User.findAll({
-                where: { is_admin: false },
-                attributes: ['id']
-            });
+            const user = await User.findByPk(id);
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
 
-            // Create messages for all users
-            const messages = users.map(user => ({
-                sender_id: req.user.id,
-                recipient_id: user.id,
-                content: message.trim(),
-                message_type: 'text'
-            }));
+            // Hash the new password
+            const hashedPassword = await hashPassword(newPassword);
 
-            await Message.bulkCreate(messages);
+            // Update the user's password hash in the database
+            await user.update({ password_hash: hashedPassword });
 
-            // Emit socket event to all users
-            const io = req.app.get('io');
-            io.emit('broadcast:message', {
-                from: 'Dahuchsi',
-                content: message.trim()
-            });
+            res.json({ message: `Password for user "${user.username}" changed successfully.` });
 
-            res.json({
-                message: 'Broadcast sent successfully',
-                recipients: users.length
-            });
         } catch (error) {
-            console.error('Broadcast message error:', error);
-            res.status(500).json({ error: 'Failed to broadcast message' });
+            console.error('Admin change user password error:', error);
+            res.status(500).json({ error: 'Failed to change user password' });
         }
     },
 
-    async deleteUser(req, res) {
+    async getSearchLogs(req, res) {
         try {
-            const { id } = req.params;
-
-            // Find the user to delete
-            const user = await User.findOne({
-                where: {
-                    id,
-                    is_admin: false // Prevent deleting admin accounts
-                }
-            });
-
-            if (!user) {
-                return res.status(404).json({ error: 'User not found or cannot delete admin users' });
+            const { userId } = req.query; // Optional: filter by user
+            const whereClause = {};
+            if (userId) {
+                whereClause.user_id = userId;
             }
 
-            const username = user.username;
-
-            // Use a transaction to ensure all related data is deleted properly
-            await sequelize.transaction(async (t) => {
-                // Delete user's downloads
-                await Download.destroy({
-                    where: { user_id: id },
-                    transaction: t
-                });
-
-                // Delete user's messages (both sent and received)
-                await Message.destroy({
-                    where: {
-                        [Op.or]: [
-                            { sender_id: id },
-                            { recipient_id: id }
-                        ]
-                    },
-                    transaction: t
-                });
-
-                // Delete user's requests
-                await Request.destroy({
-                    where: { user_id: id },
-                    transaction: t
-                });
-
-                // Finally delete the user
-                await user.destroy({ transaction: t });
+            const searchLogs = await SearchLog.findAll({
+                where: whereClause,
+                order: [['search_date', 'DESC']],
+                include: [{ model: User, as: 'user', attributes: ['username', 'avatar_url'] }] // Include user info
             });
-
-            console.log(`Admin ${req.user.username} deleted user: ${username} (ID: ${id})`);
-
-            res.json({
-                message: `User "${username}" and all associated data deleted successfully`
-            });
+            res.json(searchLogs);
         } catch (error) {
-            console.error('Delete user error:', error);
-            res.status(500).json({ error: 'Failed to delete user' });
+            console.error('Failed to fetch search logs:', error);
+            res.status(500).json({ error: 'Failed to fetch search logs' });
+        }
+    },
+
+    async getMessageLogs(req, res) {
+        try {
+            const { userId } = req.query; // Optional: filter by user
+            const whereClause = {};
+            if (userId) {
+                whereClause[Op.or] = [
+                    { sender_id: userId },
+                    { recipient_id: userId }
+                ];
+            }
+
+            const messageLogs = await MessageLog.findAll({
+                where: whereClause,
+                order: [['sent_at', 'ASC']], // Ascending order for conversational flow
+            });
+            res.json(messageLogs);
+        } catch (error) {
+            console.error('Failed to fetch message logs:', error);
+            res.status(500).json({ error: 'Failed to fetch message logs' });
         }
     }
 };

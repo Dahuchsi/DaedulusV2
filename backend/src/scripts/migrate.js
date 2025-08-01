@@ -1,105 +1,120 @@
-// src/scripts/migrate.js
-
+// backend/src/scripts/migrate.js
 const { sequelize } = require('../config/database');
-const { DataTypes } = require('sequelize'); // Import DataTypes to use correctly
+const { DataTypes } = require('sequelize');
 
-(async () => {
-  try {
-    console.log('⏳ Starting database migration...');
-    console.log('🔗 Connecting to database...');
+// --- New Table Creation Functions ---
+async function createSearchLogsTable(queryInterface, sequelize) {
+  console.log('🏗️ Creating "search_logs" table structure...');
+  await queryInterface.createTable('search_logs', {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
+    user_id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: { model: 'users', key: 'id' }, // Foreign key reference
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE',
+    },
+    username: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    query: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    search_date: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: sequelize.literal('NOW()'),
+    },
+    status: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    result_count: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+  }, {
+    tableName: 'search_logs',
+    timestamps: false,
+    underscored: true,
+  });
+  console.log('✅ "search_logs" table created successfully!');
+}
 
-    const queryInterface = sequelize.getQueryInterface();
+async function createMessageLogsTable(queryInterface, sequelize) {
+  console.log('🏗️ Creating "message_logs" table structure...');
+  await queryInterface.createTable('message_logs', {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
+    sender_id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: { model: 'users', key: 'id' },
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE',
+    },
+    sender_username: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    recipient_id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: { model: 'users', key: 'id' },
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE',
+    },
+    recipient_username: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    message_content: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    message_type: {
+      type: DataTypes.ENUM('text', 'image', 'file', 'link'),
+      allowNull: false,
+      defaultValue: 'text',
+    },
+    sent_at: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: sequelize.literal('NOW()'),
+    },
+  }, {
+    tableName: 'message_logs',
+    timestamps: false,
+    underscored: true,
+  });
+  console.log('✅ "message_logs" table created successfully!');
+}
 
-    // Check if downloads table exists
-    console.log('🔍 Checking existing tables...');
-    const tables = await queryInterface.showAllTables();
-    console.log(`📊 Found ${tables.length} tables:`, tables);
-
-    if (tables.includes('downloads')) {
-      console.log('📋 Downloads table exists, checking schema for non-destructive updates...');
-
-      try {
-        console.log('🔍 Describing downloads table structure...');
-        const columns = await queryInterface.describeTable('downloads');
-        console.log('📝 Current table columns:', Object.keys(columns));
-
-        // Log detailed column info
-        console.log('📋 Column details:');
-        Object.entries(columns).forEach(([name, details]) => {
-          console.log(`  - ${name}: ${details.type} (null: ${details.allowNull})`);
-        });
-
-        // --- NON-DESTRUCTIVE SCHEMA UPDATES ---
-
-        // Check for missing 'error' column and add it if it doesn't exist
-        if (!columns.error) {
-          console.log('➕ Missing "error" column, adding...');
-          await queryInterface.addColumn('downloads', 'error', {
-            type: DataTypes.STRING,
-            allowNull: true,
-          });
-          console.log('✅ "error" column added successfully.');
-        } else {
-          console.log('✅ "error" column already exists.');
-        }
-
-        // Handle user_id type mismatch:
-        // IMPORTANT: Automatically changing a column type (like INTEGER to UUID)
-        // on a table with existing data can cause data loss or corruption
-        // if not handled very carefully with data transformation.
-        // This script will now only warn, not automatically change or drop the table.
-        if (columns.user_id && columns.user_id.type && !columns.user_id.type.includes('UUID')) {
-          console.warn('⚠️ WARNING: "user_id" column type mismatch detected. Expected UUID, found ' + columns.user_id.type + '.');
-          console.warn('   This migration script will NOT automatically change this column type to prevent data loss.');
-          console.warn('   If you need to change "user_id" to UUID and have existing data, a manual migration with data transformation is required.');
-        } else {
-          console.log('✅ "user_id" column type verified (or acceptable).');
-        }
-
-        console.log('✅ Database schema checks for "downloads" completed. Non-destructive updates applied.');
-
-      } catch (err) {
-        // This catch block will now only execute if there's a genuine error during
-        // the schema description or addColumn operation, not from an intentional 'throw'
-        // for schema mismatches.
-        console.error('❌ Error during schema check or column alteration for "downloads" table:', err.message);
-        console.error('⚠️ Automatic table recreation is disabled to preserve data. Please address the error manually.');
-        process.exit(1); // Exit on critical error
-      }
-    } else {
-      console.log('🆕 "downloads" table not found, creating new table...');
-      await createDownloadsTable(queryInterface, sequelize);
-    }
-
-    console.log('🔍 Verifying final table structure...');
-    const finalColumns = await queryInterface.describeTable('downloads');
-    console.log('📋 Final "downloads" table columns:', Object.keys(finalColumns));
-
-    console.log('✅ Database migration completed successfully!');
-    console.log('🎉 Ready to accept downloads!');
-
-    process.exit(0);
-  } catch (err) {
-    console.error('❌ Migration process failed:', err);
-    console.error('📋 Error details:', err.message);
-    console.error('📋 Stack trace:', err.stack);
-    process.exit(1);
-  }
-})();
-
+// Ensure createDownloadsTable is also available in this file or imported
 async function createDownloadsTable(queryInterface, sequelize) {
-  console.log('🏗️ Creating "downloads" table structure...');
+  console.log('🏗️ Creating downloads table structure...');
 
   const tableDefinition = {
     id: {
-      type: DataTypes.INTEGER, // Use DataTypes directly
+      type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
-      allowNull: false,
     },
     user_id: {
-      type: DataTypes.UUID, // Use DataTypes directly. This is the desired UUID type.
+      type: DataTypes.UUID,
       allowNull: false,
+      references: { model: 'users', key: 'id' }, // Ensure foreign key is here
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE',
     },
     torrent_name: {
       type: DataTypes.STRING,
@@ -146,7 +161,7 @@ async function createDownloadsTable(queryInterface, sequelize) {
       allowNull: true,
     },
     error: {
-      type: DataTypes.STRING, // Add this column here for new table creation
+      type: DataTypes.STRING,
       allowNull: true,
     },
     completed_at: {
@@ -156,32 +171,108 @@ async function createDownloadsTable(queryInterface, sequelize) {
     created_at: {
       allowNull: false,
       type: DataTypes.DATE,
-      defaultValue: sequelize.literal('NOW()'), // Use sequelize.literal for SQL functions
+      defaultValue: sequelize.literal('NOW()'),
     },
     updated_at: {
       allowNull: false,
       type: DataTypes.DATE,
-      defaultValue: sequelize.literal('NOW()'), // Use sequelize.literal for SQL functions
+      defaultValue: sequelize.literal('NOW()'),
     },
   };
-
-  console.log('📋 Table definition for creation:');
-  Object.entries(tableDefinition).forEach(([name, config]) => {
-    console.log(`  - ${name}: ${config.type.key || config.type} (null: ${config.allowNull}, default: ${config.defaultValue || 'none'})`);
-  });
 
   try {
     await queryInterface.createTable('downloads', tableDefinition);
     console.log('✅ "downloads" table created successfully!');
-
-    // Verify the table was created correctly
-    console.log('🔍 Verifying table creation...');
-    const createdColumns = await queryInterface.describeTable('downloads');
-    console.log('✅ Table verification complete.');
-    console.log(`📊 Created ${Object.keys(createdColumns).length} columns successfully.`);
-
   } catch (createErr) {
     console.error('❌ Failed to create "downloads" table:', createErr.message);
     throw createErr;
   }
 }
+
+
+// Modify the main (async () => { ... })(); block
+(async () => {
+  try {
+    console.log('⏳ Starting database migration...');
+    console.log('🔗 Connecting to database...');
+
+    const queryInterface = sequelize.getQueryInterface();
+
+    // Fetch all existing table names upfront
+    console.log('🔍 Checking existing tables...');
+    const tables = await queryInterface.showAllTables();
+    console.log(`📊 Found ${tables.length} tables:`, tables);
+
+
+    // --- Downloads Table Migration (existing non-destructive logic) ---
+    console.log('\n--- Processing "downloads" table ---');
+    if (tables.includes('downloads')) {
+      try {
+        console.log('🔍 Describing downloads table structure...');
+        const downloadsColumns = await queryInterface.describeTable('downloads');
+        console.log('📝 Current downloads table columns:', Object.keys(downloadsColumns));
+
+        if (!downloadsColumns.error) {
+          console.log('➕ Missing "error" column in downloads, adding...');
+          await queryInterface.addColumn('downloads', 'error', {
+            type: DataTypes.STRING,
+            allowNull: true,
+          });
+          console.log('✅ "error" column added successfully to downloads.');
+        } else {
+          console.log('✅ "error" column already exists in downloads.');
+        }
+
+        if (downloadsColumns.user_id && downloadsColumns.user_id.type && !downloadsColumns.user_id.type.includes('UUID')) {
+          console.warn('⚠️ WARNING: "user_id" column type mismatch in downloads (expected UUID, found ' + downloadsColumns.user_id.type + ').');
+          console.warn('   This migration script will NOT automatically change this column type to prevent data loss.');
+        } else {
+          console.log('✅ "user_id" column type verified (or acceptable) in downloads.');
+        }
+        console.log('✅ Downloads table schema checks completed. Non-destructive updates applied.');
+      } catch (err) {
+        console.error('❌ Error during schema check or column alteration for "downloads" table:', err.message);
+        console.error('⚠️ Please address the error manually.');
+        process.exit(1);
+      }
+    } else {
+      console.log('🆕 "downloads" table not found, creating new table...');
+      await createDownloadsTable(queryInterface, sequelize);
+    }
+
+
+    // --- New Tables Migration ---
+    console.log('\n--- Processing "search_logs" table ---');
+    if (!tables.includes('search_logs')) {
+      await createSearchLogsTable(queryInterface, sequelize);
+    } else {
+      console.log('✅ "search_logs" table already exists.');
+    }
+
+    console.log('\n--- Processing "message_logs" table ---');
+    if (!tables.includes('message_logs')) {
+      await createMessageLogsTable(queryInterface, sequelize);
+    } else {
+      console.log('✅ "message_logs" table already exists.');
+    }
+
+    console.log('\n🔍 Verifying final table structures...');
+    const finalDownloadsColumns = await queryInterface.describeTable('downloads');
+    console.log('📋 Final "downloads" table columns:', Object.keys(finalDownloadsColumns));
+    const finalSearchLogsColumns = await queryInterface.describeTable('search_logs');
+    console.log('📋 Final "search_logs" table columns:', Object.keys(finalSearchLogsColumns));
+    const finalMessageLogsColumns = await queryInterface.describeTable('message_logs');
+    console.log('📋 Final "message_logs" table columns:', Object.keys(finalMessageLogsColumns));
+
+
+    console.log('\n✅ Database migration completed successfully!');
+    console.log('🎉 Ready to accept data logs!');
+
+    process.exit(0);
+  } catch (err) {
+    console.error('❌ Migration failed:', err);
+    console.error('📋 Error details:', err.message);
+    console.error('📋 Stack trace:', err.stack);
+    process.exit(1);
+  }
+})();
