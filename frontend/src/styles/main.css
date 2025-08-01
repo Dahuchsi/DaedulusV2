@@ -13,6 +13,7 @@
     /* NEW: Variables for message backgrounds, can be overridden in dark mode */
     --background-message-received: #e0e0e0; /* Default for received messages in light mode */
     --bg-light: #f9fafb; /* Define a light background for elements like file preview, etc. */
+    --input-bg: #fff;
 }
 
 html, body {
@@ -1113,6 +1114,7 @@ button:disabled {
         /* NEW: Variables for message backgrounds in dark mode */
         --background-message-received: #23272e; /* For received messages in dark mode */
         --bg-light: #2d3748; /* Adjust this if used for file preview background in dark mode */
+        --input-bg: #1f2937;
     }
     
     /* Messages content dark mode is now handled in Messages.css */
@@ -1133,106 +1135,106 @@ button:disabled {
 
 /* --- Recent Searches Styles --- */
 .recent-searches-list {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-bottom: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
 }
 
 .recent-search-item {
-  background: var(--background);
-  color: var(--text-primary);
-  padding: 0.5rem 1rem;
-  border-radius: 0.375rem;
-  cursor: pointer;
-  transition: background 0.2s, color 0.2s;
-  font-size: 1rem;
-  border: 1px solid var(--border-color);
-  outline: none;
-  user-select: none;
+    background: var(--background);
+    color: var(--text-primary);
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+    font-size: 1rem;
+    border: 1px solid var(--border-color);
+    outline: none;
+    user-select: none;
 }
 
 .recent-search-item:hover {
-  background: var(--primary-color);
-  color: #fff;
-  border-color: var(--primary-color);
+    background: var(--primary-color);
+    color: #fff;
+    border-color: var(--primary-color);
 }
 
 .recent-search-item.active,
 .recent-search-item:active {
-  background: var(--primary-color);
-  color: #fff;
-  border-color: var(--primary-color);
+    background: var(--primary-color);
+    color: #fff;
+    border-color: var(--primary-color);
 }
 
 /* --- Recent Downloads Table Styles --- */
 .recent-downloads-table {
-  width: 100%;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-  background: var(--card-background);
-  margin-top: 0.5rem;
+    width: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    background: var(--card-background);
+    margin-top: 0.5rem;
 }
 
 .downloads-table-header,
 .download-row {
-  display: grid;
-  grid-template-columns: 3fr 1fr 1fr 1.5fr 1fr;
-  align-items: center;
-  padding: 0.75rem 1rem;
+    display: grid;
+    grid-template-columns: 3fr 1fr 1fr 1.5fr 1fr;
+    align-items: center;
+    padding: 0.75rem 1rem;
 }
 
 .downloads-table-header {
-  background: var(--background);
-  font-weight: 600;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color);
-  font-size: 0.95rem;
+    background: var(--background);
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.95rem;
 }
 
 .header-cell {
-  cursor: pointer;
-  user-select: none;
-  transition: color 0.2s;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s;
 }
 
 .header-cell.active {
-  color: var(--primary-color);
+    color: var(--primary-color);
 }
 
 .download-row {
-  border-bottom: 1px solid var(--border-color);
-  transition: background 0.2s;
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.2s;
 }
 
 .download-row:hover {
-  background: var(--background);
+    background: var(--background);
 }
 
 .cell {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .file-type-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.95em;
-  background: var(--background);
-  border-radius: 4px;
-  padding: 0.15em 0.5em;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.95em;
+    background: var(--background);
+    border-radius: 4px;
+    padding: 0.15em 0.5em;
 }
 
 .download-name {
-  font-weight: 500;
-  color: var(--text-primary);
-  max-width: 100%;
-  display: inline-block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+    font-weight: 500;
+    color: var(--text-primary);
+    max-width: 100%;
+    display: inline-block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 }

@@ -188,6 +188,9 @@ const Messages: React.FC = () => {
         // Only scroll if there are messages and the ref is available
         if (messages.length > 0 && messagesEndRef.current) {
             const timer = setTimeout(() => {
+                // The key fix is here: `block: 'end'` scrolls the element to the bottom of the visible area.
+                // Since the message-input bar is sticky at the bottom, this ensures the last message is
+                // visible right above the input bar, without the window jumping.
                 messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
             }, 100); // Small delay to ensure DOM update
             return () => clearTimeout(timer);
