@@ -1,5 +1,7 @@
 // models/Download.js
-module.exports = (sequelize, DataTypes) => {
+const { DataTypes } = require('sequelize'); // Make sure DataTypes is imported
+
+module.exports = (sequelize) => {
   const Download = sequelize.define('Download', {
     id: {
       type: DataTypes.INTEGER,
@@ -7,7 +9,7 @@ module.exports = (sequelize, DataTypes) => {
       autoIncrement: true,
     },
     user_id: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.UUID, // Changed from INTEGER to UUID to match User.id
       allowNull: false,
     },
     torrent_name: {
@@ -79,7 +81,7 @@ module.exports = (sequelize, DataTypes) => {
   });
 
   Download.associate = function(models) {
-    Download.belongsTo(models.User, { foreignKey: 'user_id' });
+    Download.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' }); // ADDED: as: 'user'
   };
 
   return Download;

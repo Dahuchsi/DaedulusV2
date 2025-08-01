@@ -35,7 +35,6 @@ const adminController = {
             const downloads = await Download.findAll({
                 include: [{
                     model: User,
-                    as: 'user', // ADDED 'as' ALIAS: ASSUMES Download.belongsTo(User, { as: 'user' })
                     attributes: ['id', 'username', 'email']
                 }],
                 order: [['created_at', 'DESC']],
@@ -45,7 +44,7 @@ const adminController = {
 
             const formattedDownloads = downloads.map(download => ({
                 ...download.toJSON(),
-                username: download.user?.username || 'Unknown' // Use the alias here
+                username: download.User?.username || 'Unknown'
             }));
 
             res.json(formattedDownloads);
@@ -75,7 +74,6 @@ const adminController = {
             const requests = await Request.findAll({
                 include: [{
                     model: User,
-                    as: 'user', // ADDED 'as' ALIAS: ASSUMES Request.belongsTo(User, { as: 'user' })
                     attributes: ['id', 'username', 'email']
                 }],
                 order: [['created_at', 'DESC']]
@@ -83,7 +81,7 @@ const adminController = {
 
             const formattedRequests = requests.map(request => ({
                 ...request.toJSON(),
-                username: request.user?.username || 'Unknown' // Use the alias here
+                username: request.User?.username || 'Unknown'
             }));
 
             res.json(formattedRequests);
