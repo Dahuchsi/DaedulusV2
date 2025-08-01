@@ -1,6 +1,7 @@
+// This is the full, corrected Admin.tsx file.
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
-import { useAuth } from '../contexts/AuthContext'; // Import useAuth to access user
+import { useAuth } from '../contexts/AuthContext';
 
 interface UserStats {
     total_users: number;
@@ -64,9 +65,8 @@ const Admin: React.FC = () => {
     const [activeTab, setActiveTab] = useState('overview');
     const [loading, setLoading] = useState(false);
 
-    const { user } = useAuth(); // Destructure user from useAuth() hook
+    const { user } = useAuth();
 
-    // Helper function to format dates safely
     const formatDate = (dateString: string | null | undefined): string => {
         if (!dateString) return 'Unknown';
 
@@ -82,7 +82,6 @@ const Admin: React.FC = () => {
         }
     };
 
-    // Helper function to get relative time
     const getRelativeTime = (dateString: string | null | undefined): string => {
         if (!dateString) return 'Unknown';
 
@@ -105,7 +104,6 @@ const Admin: React.FC = () => {
         }
     };
 
-    // Memoize the time formatters for performance
     const memoizedFormatDate = useCallback(formatDate, []);
     const memoizedGetRelativeTime = useCallback(getRelativeTime, []);
 
@@ -115,7 +113,6 @@ const Admin: React.FC = () => {
         fetchAllDownloads();
     }, []);
 
-    // Fetch users, search logs, message logs when respective tabs are selected
     useEffect(() => {
         if (activeTab === 'users') {
             fetchUsers();
@@ -406,15 +403,15 @@ const Admin: React.FC = () => {
                             <tbody>
                                 {allDownloads.map((download: any) => (
                                     <tr key={download.id}>
-                                        <td>{download.username}</td>
-                                        <td>{download.torrent_name}</td>
-                                        <td>{download.file_type}</td>
-                                        <td>
+                                        <td data-label="User">{download.username}</td>
+                                        <td data-label="File">{download.torrent_name}</td>
+                                        <td data-label="Type">{download.file_type}</td>
+                                        <td data-label="Status">
                                             <span className={`status ${download.status}`}>
                                                 {download.status}
                                             </span>
                                         </td>
-                                        <td>{memoizedFormatDate(download.created_at)}</td>
+                                        <td data-label="Date">{memoizedFormatDate(download.created_at)}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -446,7 +443,7 @@ const Admin: React.FC = () => {
                                     {users.length > 0 ? (
                                         users.map((user) => (
                                             <tr key={user.id}>
-                                                <td>
+                                                <td data-label="Avatar">
                                                     <div className="user-avatar">
                                                         {user.avatar_url ? (
                                                             <img
@@ -481,7 +478,7 @@ const Admin: React.FC = () => {
                                                         )}
                                                     </div>
                                                 </td>
-                                                <td>
+                                                <td data-label="Username">
                                                     <div>
                                                         <strong>{user.username}</strong>
                                                         {user.display_phrase && (
@@ -491,13 +488,13 @@ const Admin: React.FC = () => {
                                                         )}
                                                     </div>
                                                 </td>
-                                                <td>{user.email}</td>
-                                                <td>
+                                                <td data-label="Email">{user.email}</td>
+                                                <td data-label="Role">
                                                     <span className={`role-badge ${user.is_admin ? 'admin' : 'user'}`}>
                                                         {user.is_admin ? 'Admin' : 'User'}
                                                     </span>
                                                 </td>
-                                                <td>
+                                                <td data-label="Joined">
                                                     <div>
                                                         <div>{memoizedFormatDate(user.created_at)}</div>
                                                         <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
@@ -505,7 +502,7 @@ const Admin: React.FC = () => {
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td>
+                                                <td data-label="Last Active">
                                                     <div>
                                                         <div>{memoizedFormatDate(user.updated_at)}</div>
                                                         <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
@@ -513,14 +510,13 @@ const Admin: React.FC = () => {
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td>
+                                                <td data-label="Actions">
                                                     {!user.is_admin && (
-                                                        <>
+                                                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                                                             <button
                                                                 onClick={() => handleChangeUserPassword(user.id, user.username)}
                                                                 className="btn-primary"
                                                                 style={{
-                                                                    marginRight: '0.5rem',
                                                                     backgroundColor: '#10b981',
                                                                     padding: '0.25rem 0.5rem',
                                                                     fontSize: '0.8rem',
@@ -543,7 +539,7 @@ const Admin: React.FC = () => {
                                                             >
                                                                 Delete
                                                             </button>
-                                                        </>
+                                                        </div>
                                                     )}
                                                 </td>
                                             </tr>
@@ -583,7 +579,7 @@ const Admin: React.FC = () => {
                                     {searchLogs.length > 0 ? (
                                         searchLogs.map(log => (
                                             <tr key={log.id}>
-                                                <td>
+                                                <td data-label="User">
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                         {log.user?.avatar_url ? (
                                                             <img
@@ -614,10 +610,10 @@ const Admin: React.FC = () => {
                                                         {log.username}
                                                     </div>
                                                 </td>
-                                                <td>{log.query}</td>
-                                                <td>{memoizedFormatDate(log.search_date)}</td>
-                                                <td><span className={`status ${log.status === 'success' ? 'completed' : log.status === 'error' ? 'failed' : 'queued'}`}>{log.status}</span></td>
-                                                <td>{log.result_count}</td>
+                                                <td data-label="Query">{log.query}</td>
+                                                <td data-label="Date">{memoizedFormatDate(log.search_date)}</td>
+                                                <td data-label="Status"><span className={`status ${log.status === 'success' ? 'completed' : log.status === 'error' ? 'failed' : 'queued'}`}>{log.status}</span></td>
+                                                <td data-label="Results">{log.result_count}</td>
                                             </tr>
                                         ))
                                     ) : (
@@ -639,8 +635,7 @@ const Admin: React.FC = () => {
                         <div className="loading">Loading message logs...</div>
                     ) : (
                         <div className="message-logs-conversations">
-                            {/* Group messages by conversation (sender_id and recipient_id pair) */}
-                            {((currentUserFromAuth) => { // IIFE now accepts 'currentUserFromAuth' as an argument
+                            {((currentUserFromAuth) => {
                                 const conversationsMap = new Map<string, MessageLogEntry[]>();
                                 messageLogs.forEach(log => {
                                     const convoKey = [log.sender_id, log.recipient_id].sort().join('-');
@@ -657,7 +652,7 @@ const Admin: React.FC = () => {
                                             {logs.map(log => (
                                                 <div
                                                     key={log.id}
-                                                    className={`message-log-item ${log.sender_id === currentUserFromAuth?.id ? 'sent' : 'received'}`} // Use currentUserFromAuth
+                                                    className={`message-log-item ${log.sender_id === currentUserFromAuth?.id ? 'sent' : 'received'}`}
                                                 >
                                                     <div className="message-log-content">
                                                         <strong>{log.sender_username}:</strong> {formatMessageLogContent(log)}
@@ -670,7 +665,7 @@ const Admin: React.FC = () => {
                                         </div>
                                     </div>
                                 ));
-                            })(user)} {/* Pass the 'user' variable from the outer scope to the IIFE */}
+                            })(user)}
                             {messageLogs.length === 0 && (
                                 <p style={{ textAlign: 'center', padding: '2rem' }}>No message logs found.</p>
                             )}

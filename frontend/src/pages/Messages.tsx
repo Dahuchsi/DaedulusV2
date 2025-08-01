@@ -1,3 +1,4 @@
+// This is the full, corrected Messages.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -52,7 +53,6 @@ const Messages: React.FC = () => {
   const messageInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // Helper function to scroll to the bottom of the message list
   const scrollToBottom = useCallback(() => {
     if (messagesListRef.current) {
       messagesListRef.current.scrollTop = messagesListRef.current.scrollHeight;
@@ -65,17 +65,14 @@ const Messages: React.FC = () => {
   }, [messages, scrollToBottom]);
 
   // Fix for mobile viewport changes (keyboard open)
-  // This is a more robust way to handle mobile keyboard
   useEffect(() => {
     if (!messagesListRef.current) return;
 
     let initialHeight = window.innerHeight;
     const handleResize = () => {
-      // Only scroll if the new height is significantly smaller (i.e., keyboard opened)
       if (window.innerHeight < initialHeight - 100) {
         scrollToBottom();
       }
-      // Update initial height after the resize event, to handle screen rotation and keyboard closure
       initialHeight = window.innerHeight;
     };
 
@@ -91,7 +88,6 @@ const Messages: React.FC = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Format message time
   const formatMessageTime = (dateString: string | null | undefined): string => {
     if (!dateString) return '';
     try {
@@ -112,7 +108,6 @@ const Messages: React.FC = () => {
     }
   };
 
-  // Fetch conversations
   const fetchConversations = useCallback(async () => {
     try {
       const response = await api.get('/messages/conversations');
@@ -122,7 +117,6 @@ const Messages: React.FC = () => {
     }
   }, []);
 
-  // Fetch messages and mark as read
   const fetchMessages = useCallback(
     async (friendId: string) => {
       try {
@@ -131,8 +125,7 @@ const Messages: React.FC = () => {
         setSelectedConversation(friendId);
         await api.put(`/messages/${friendId}/read`);
         await fetchConversations();
-        // Ensure scroll to bottom on new conversation load
-        setTimeout(scrollToBottom, 0); // Use 0 timeout to push to next event loop cycle
+        setTimeout(scrollToBottom, 0);
       } catch (error) {
         console.error('Failed to fetch messages:', error);
       }
@@ -140,7 +133,6 @@ const Messages: React.FC = () => {
     [fetchConversations, scrollToBottom]
   );
 
-  // Handle new incoming message
   const handleNewMessage = useCallback(
     (message: Message) => {
       if (selectedConversation === message.sender_id || selectedConversation === message.recipient_id) {
@@ -165,14 +157,12 @@ const Messages: React.FC = () => {
     [selectedConversation, fetchConversations]
   );
 
-  // Handle real-time read receipts
   const handleMessageRead = useCallback((data: { messageId: string; readerId: string }) => {
     setMessages((prevMessages) =>
       prevMessages.map((msg) => (msg.id === data.messageId ? { ...msg, is_read: true } : msg))
     );
   }, []);
 
-  // Typing indicators
   const handleTypingStart = useCallback(
     (data: { userId: string; username: string }) => {
       if (data.userId === selectedConversation) {
@@ -190,7 +180,6 @@ const Messages: React.FC = () => {
     });
   }, []);
 
-  // Socket event handlers
   useEffect(() => {
     if (socket && socket.connected && user) {
       socket.emit('join:user', user.id);
@@ -207,12 +196,10 @@ const Messages: React.FC = () => {
     }
   }, [socket, user, handleNewMessage, handleMessageRead, handleTypingStart, handleTypingStop]);
 
-  // Initial fetch
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
 
-  // Handle typing indication
   const handleTyping = () => {
     if (!isTyping && selectedConversation && socket) {
       setIsTyping(true);
@@ -235,13 +222,11 @@ const Messages: React.FC = () => {
     }, 1000);
   };
 
-  // Send message (text, file, or both)
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     setSendError(null);
     if (!selectedConversation || (!newMessage.trim() && !selectedFile)) return;
 
-    // Stop typing indicator
     if (isTyping && socket) {
       setIsTyping(false);
       socket.emit('typing:stop', {
@@ -315,7 +300,6 @@ const Messages: React.FC = () => {
     }
   };
 
-  // Handle file selection and preview
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -328,7 +312,6 @@ const Messages: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Format message content based on type
   const formatMessageContent = (message: Message) => {
     switch (message.message_type) {
       case 'image':
@@ -344,6 +327,7 @@ const Messages: React.FC = () => {
               display: 'block',
             }}
             onClick={() => window.open(message.content, '_blank')}
+            onLoad={scrollToBottom} // <--- ADDED: Trigger scroll on image load
           />
         );
       case 'file': {
@@ -360,6 +344,7 @@ const Messages: React.FC = () => {
                 maxHeight: isMobile ? '200px' : '250px',
                 borderRadius: '8px',
               }}
+              onLoadedData={scrollToBottom} // <--- ADDED: Trigger scroll on video load
             />
           );
         }

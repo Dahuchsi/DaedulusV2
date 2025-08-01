@@ -1,7 +1,6 @@
 /*
  * Consolidated Global Styles - main.css
- * This file combines styles from main.css and index.css
- * and correctly implements dark mode.
+ * Corrected with responsive table and sorting fixes.
  */
 
 /* --- Root Variables and Dark Mode Implementation --- */
@@ -97,8 +96,8 @@ body {
 
 .nav-links a:hover,
 .nav-links a.active {
-    color: #fff; /* Removed !important */
-    background: var(--primary-color); /* Removed !important */
+    color: #fff;
+    background: var(--primary-color);
 }
 
 .nav-user {
@@ -854,12 +853,13 @@ button:disabled {
     font-style: italic;
 }
 
-/* Admin Dashboard */
+/* --- Admin Dashboard --- */
 .admin-tabs {
     display: flex;
     gap: 1rem;
     margin-bottom: 2rem;
     border-bottom: 2px solid var(--border-color);
+    overflow-x: auto;
 }
 
 .admin-tabs button {
@@ -872,6 +872,7 @@ button:disabled {
     margin-bottom: -2px;
     transition: all 0.3s;
     cursor: pointer;
+    white-space: nowrap;
 }
 
 .admin-tabs button:hover {
@@ -962,7 +963,6 @@ button:disabled {
     border-radius: 0.5rem;
     overflow: hidden;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    overflow-x: auto;
 }
 
 .users-table table {
@@ -1171,27 +1171,26 @@ button:disabled {
     white-space: nowrap;
 }
 
-
-/* --- Responsive Design --- */
+/* --- Responsive Design (Mobile First) --- */
 @media (max-width: 768px) {
     .main-content {
         padding: 1rem;
     }
-    
+
     .nav-links {
         flex-wrap: wrap;
         gap: 1rem;
     }
-    
+
     .search-form {
         flex-direction: column;
     }
-    
+
     .result-item {
         flex-direction: column;
         align-items: flex-start;
     }
-    
+
     .result-actions {
         margin-top: 1rem;
         width: 100%;
@@ -1200,34 +1199,84 @@ button:disabled {
     .stats-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .file-type-selector-card {
         width: 95%;
         padding: 1.5rem;
     }
-    
+
     .selector-actions {
         flex-direction: column;
     }
-    
+
     .selector-actions button {
         width: 100%;
     }
-    
-    .users-table {
+
+    /* Keep table headers visible but make the entire table container horizontally scrollable */
+    .users-table, .downloads-table {
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
-    
-    .users-table th,
-    .users-table td {
+
+    .users-table table, .downloads-table table {
+        min-width: 700px; /* Ensure tables are wide enough to prevent awkward wrapping */
+    }
+
+    /* Adjust padding and font sizes for mobile tables for better readability */
+    .users-table th, .users-table td,
+    .downloads-table th, .downloads-table td {
         padding: 0.75rem 0.5rem;
         font-size: 0.875rem;
     }
-    
+
+    .users-table .user-avatar {
+        justify-content: flex-start;
+    }
+
+    .users-table .delete-user-btn,
+    .users-table .btn-primary {
+        white-space: nowrap;
+    }
+
+    .recent-downloads-table .downloads-table-body {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .recent-downloads-table .downloads-table-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .downloads-table-body .download-row {
+        display: table-row; /* This line is crucial to restore the table layout */
+    }
+
+    .downloads-table-body .cell {
+        display: table-cell; /* This line is crucial to restore the table layout */
+        border-bottom: 1px solid var(--border-color);
+        padding: 0.75rem 0.5rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .downloads-table-body .cell::before {
+        display: none;
+    }
+
+    .downloads-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
     .avatar-upload-section {
         margin-top: 1rem;
     }
-    
+
     .upload-hint {
         font-size: 0.7rem;
     }

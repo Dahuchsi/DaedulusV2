@@ -1,3 +1,4 @@
+// This is the full, corrected Dashboard.tsx file.
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
@@ -237,12 +238,12 @@ const Dashboard: React.FC = () => {
               <div className="downloads-table-body">
                 {sortedDownloads.map(download => (
                   <div key={download.id} className="download-row">
-                    <div className="cell name">
+                    <div data-label="Name" className="cell name">
                       <span className="download-name" title={download.torrent_name}>
                         {download.torrent_name}
                       </span>
                     </div>
-                    <div className="cell type">
+                    <div data-label="Type" className="cell type">
                       <span className={`file-type-badge ${download.file_type}`}>
                         {download.file_type === 'movie' ? '🎬' :
                           download.file_type === 'series' ? '📺' :
@@ -250,13 +251,13 @@ const Dashboard: React.FC = () => {
                         {download.file_type}
                       </span>
                     </div>
-                    <div className="cell size">
+                    <div data-label="Size" className="cell size">
                       {formatFileSize(download.file_size || 0)}
                     </div>
-                    <div className="cell date">
+                    <div data-label="Date" className="cell date">
                       {formatDate(download.created_at)}
                     </div>
-                    <div className="cell status">
+                    <div data-label="Status" className="cell status">
                       <span className={`status ${download.status}`}>
                         {download.status}
                       </span>
