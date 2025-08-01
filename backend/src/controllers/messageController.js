@@ -31,7 +31,7 @@ const upload = multer({
         const allowedTypes = /jpeg|jpg|png|gif|webp|mp4|mov|avi|pdf|doc|docx|txt|zip|rar/;
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
         const mimetype = allowedTypes.test(file.mimetype) || file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/');
-        
+
         if (mimetype && extname) {
             return cb(null, true);
         } else {
@@ -56,7 +56,7 @@ async function getConversations(req, res) {
                 attributes: ['id', 'username', 'avatar_url']
             }]
         });
-        
+
         // Get last message and unread count for each conversation
         const conversations = await Promise.all(friendships.map(async (friendship) => {
             const lastMessage = await Message.findOne({
@@ -68,7 +68,7 @@ async function getConversations(req, res) {
                 },
                 order: [['created_at', 'DESC']]
             });
-            
+
             const unreadCount = await Message.count({
                 where: {
                     sender_id: friendship.friend_id,
@@ -76,7 +76,7 @@ async function getConversations(req, res) {
                     is_read: false
                 }
             });
-            
+
             return {
                 friend_id: friendship.friend.id,
                 friend_username: friendship.friend.username,
@@ -85,9 +85,9 @@ async function getConversations(req, res) {
                 unread_count: unreadCount
             };
         }));
-        
+
         res.json(conversations);
-        
+
     } catch (error) {
         console.error('Get conversations error:', error);
         res.status(500).json({ error: 'Failed to fetch conversations' });
@@ -98,7 +98,7 @@ async function getMessages(req, res) {
     try {
         const { friendId } = req.params;
         const { limit = 50, offset = 0 } = req.query;
-        
+
         // Verify friendship exists
         const friendship = await Friendship.findOne({
             where: {
@@ -107,11 +107,11 @@ async function getMessages(req, res) {
                 status: 'accepted'
             }
         });
-        
+
         if (!friendship) {
             return res.status(403).json({ error: 'Not authorized to view these messages' });
         }
-        
+
         const messages = await Message.findAll({
             where: {
                 [Op.or]: [
@@ -128,9 +128,9 @@ async function getMessages(req, res) {
             limit: parseInt(limit),
             offset: parseInt(offset)
         });
-        
+
         res.json(messages.reverse());
-        
+
     } catch (error) {
         console.error('Get messages error:', error);
         res.status(500).json({ error: 'Failed to fetch messages' });
@@ -140,11 +140,11 @@ async function getMessages(req, res) {
 async function sendMessage(req, res) {
     try {
         const { recipient_id, content, message_type = 'text' } = req.body;
-        
+
         if (!content || !content.trim()) {
             return res.status(400).json({ error: 'Message content is required' });
         }
-        
+
         // Verify friendship exists
         const friendship = await Friendship.findOne({
             where: {
@@ -153,22 +153,22 @@ async function sendMessage(req, res) {
                 status: 'accepted'
             }
         });
-        
+
         if (!friendship) {
             return res.status(403).json({ error: 'You can only message friends' });
         }
-        
+
         // Detect if content is a URL for link messages
         const urlRegex = /^https?:\/\/[^\s]+$/;
         const actualMessageType = urlRegex.test(content.trim()) ? 'link' : message_type;
-        
+
         const message = await Message.create({
             sender_id: req.user.id,
             recipient_id,
             content: content.trim(),
             message_type: actualMessageType
         });
-        
+
         const messageWithSender = await Message.findByPk(message.id, {
             include: [{
                 model: User,
@@ -176,13 +176,13 @@ async function sendMessage(req, res) {
                 attributes: ['id', 'username', 'avatar_url']
             }]
         });
-        
+
         // Emit socket event
         const io = req.app.get('io');
         io.to(`user_${recipient_id}`).emit('message:new', messageWithSender);
-        
+
         res.status(201).json(messageWithSender);
-        
+
     } catch (error) {
         console.error('Send message error:', error);
         res.status(500).json({ error: 'Failed to send message' });
@@ -283,6 +283,16 @@ function uploadFile(req, res) {
 async function markAsRead(req, res) {
     try {
         const { friendId } = req.params;
+        const recipientId = req.user.id; // The user marking messages as read is the recipient 
+
+        // Find the messages that were sent by the friend and received by the current user, and are unread
+        const unreadMessages = await Message.findAll({ // Get unread messages to emit events for them 
+            where: {
+                sender_id: friendId,
+                recipient_id: recipientId,
+                is_read: false
+            }
+        });
 
         await Message.update(
             { is_read: true },
@@ -294,6 +304,17 @@ async function markAsRead(req, res) {
                 }
             }
         );
+
+        // Emit socket event for each message that was marked as read 
+        const io = req.app.get('io');
+        unreadMessages.forEach(message => {
+            // Emit to the sender (friendId) that their message (message.id) has been read by recipientId 
+            io.to(`user_${message.sender_id}`).emit('message:read', {
+                messageId: message.id,
+                readerId: recipientId // The user who read the message 
+            });
+            console.log(`Emitted message:read for message ${message.id} to user ${message.sender_id}`); // Log for debugging 
+        });
 
         res.json({ message: 'Messages marked as read' });
 

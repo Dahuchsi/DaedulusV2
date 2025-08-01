@@ -1,0 +1,48 @@
+.background-video {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    min-width: 100%;
+    min-height: 100%;
+    width: auto;
+    height: auto;
+    z-index: -1;
+    background-size: cover;
+    /* Optional: Add a blur or overlay for better text readability */
+    filter: brightness(0.6) blur(2px);
+}
+
+.auth-page {
+    position: relative; /* Ensure the video is positioned relative to this */
+    overflow: hidden; /* Hide any overflow from the video */
+}
+
+/* Adjust auth-container for better contrast over video */
+.auth-container {
+    background: rgba(255, 255, 255, 0.9); /* Slightly transparent white */
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3); /* Stronger shadow for contrast */
+    width: 100%;
+    max-width: 400px;
+    z-index: 1; /* Bring to front of video */
+}
+
+/* Ensure text color is readable */
+.auth-container h1,
+.auth-container h2,
+.auth-container label {
+    color: var(--text-primary); /* Use your existing text primary color */
+}
+
+/* Dark mode adjustments if needed for video overlay */
+@media (prefers-color-scheme: dark) {
+    .background-video {
+        filter: brightness(0.3) blur(2px); /* Darker blur in dark mode */
+    }
+
+    .auth-container {
+        background: rgba(31, 41, 55, 0.9); /* Darker transparent background */
+        color: var(--text-primary);
+    }
+}

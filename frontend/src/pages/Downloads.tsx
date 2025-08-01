@@ -18,57 +18,24 @@ interface Download {
     alldebrid_id?: string;
 }
 
-// Real-time progress bar component
+// Real-time progress bar component (Simplified for direct display) 
 const RealTimeProgressBar: React.FC<{
     progress: number;
     speed: number;
-    fileSize?: number;
+    fileSize?: number; // Keep for display if needed
     status: string;
 }> = ({ progress, speed, fileSize, status }) => {
-    const [displayed, setDisplayed] = useState(progress);
-    const lastProgressRef = useRef(progress);
-    const lastSpeedRef = useRef(speed);
-    const lastUpdateRef = useRef(Date.now());
-    const rafRef = useRef<number>();
-
-    useEffect(() => {
-        // On backend update, reset refs and displayed progress
-        lastProgressRef.current = progress;
-        lastSpeedRef.current = speed;
-        lastUpdateRef.current = Date.now();
-        setDisplayed(progress);
-
-        // Animate progress in real time
-        const animate = () => {
-            if (status !== 'transferring' && status !== 'debriding') return;
-            const now = Date.now();
-            const elapsed = (now - lastUpdateRef.current) / 1000; // seconds
-            let estProgress = lastProgressRef.current;
-            if (fileSize && lastSpeedRef.current > 0) {
-                // Estimate progress based on speed and elapsed time
-                const bytesTransferred = lastSpeedRef.current * elapsed;
-                const percent = (bytesTransferred / fileSize) * 100;
-                estProgress = Math.min(100, lastProgressRef.current + percent);
-            }
-            // Clamp to 100 and never go below last known progress
-            estProgress = Math.max(lastProgressRef.current, Math.min(100, estProgress));
-            setDisplayed(estProgress);
-            if (estProgress < 100) {
-                rafRef.current = requestAnimationFrame(animate);
-            }
-        };
-        rafRef.current = requestAnimationFrame(animate);
-        return () => rafRef.current && cancelAnimationFrame(rafRef.current);
-    }, [progress, speed, fileSize, status]);
+    // No local state or animation needed here. 
+    // The `progress` prop directly reflects the most recent value from the parent. 
 
     return (
         <div className="progress-bar">
             <div
                 className="progress-fill"
                 style={{
-                    width: `${displayed}%`,
-                    backgroundColor: displayed > 0 ? '#2563eb' : '#e5e7eb',
-                    transition: 'width 0.1s linear'
+                    [cite_start]width: `${progress}%`, // Directly use the provided progress [cite: 4]
+                    backgroundColor: progress > 0 ? '#2563eb' : '#e5e7eb',
+                    transition: 'width 0.3s ease-out' // Smooth transition when progress updates 
                 }}
             />
         </div>

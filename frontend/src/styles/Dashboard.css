@@ -1,0 +1,104 @@
+/* --- Dashboard Recent Downloads Table Styles --- */
+.recent-downloads-table {
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: var(--card-background);
+  margin-top: 0.5rem;
+}
+
+.downloads-table-header,
+.download-row {
+  display: grid;
+  /* Adjust these values to control column widths and spacing */
+  /* Example based on your screenshot: Name is wide, then smaller columns for Type, Size, Date, Status */
+  grid-template-columns: 3fr 1.2fr 1.2fr 1.5fr 1fr; /* Example proportions, adjust as needed */
+  align-items: center;
+  padding: 0.75rem 1rem; /* Consistent padding for header and rows */
+}
+
+.downloads-table-header {
+  background: var(--background); /* Light background for header */
+  font-weight: 600; /* Bold text for headers */
+  color: var(--text-secondary); /* Subdued text color for headers */
+  border-bottom: 1px solid var(--border-color); /* Separator line */
+  font-size: 0.95rem;
+}
+
+.header-cell {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.2s;
+  /* Ensure header text doesn't wrap unnecessarily */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-cell.active {
+  color: var(--primary-color); /* Highlight active sort column */
+}
+
+.download-row {
+  border-bottom: 1px solid var(--border-color); /* Separator line between rows */
+  transition: background 0.2s;
+}
+
+.download-row:last-child {
+    border-bottom: none; /* No border for the last row */
+}
+
+.download-row:hover {
+  background: var(--background); /* Hover effect for rows */
+}
+
+.cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 0.5rem; /* Add some padding to separate content within cells */
+}
+
+.cell:last-child {
+  padding-right: 0; /* No right padding for the last cell */
+}
+
+.download-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  max-width: 100%;
+  display: inline-block; /* Essential for ellipsis to work */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ensure badges and icons align well */
+.file-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.95em;
+    background: var(--background);
+    border-radius: 4px;
+    padding: 0.15em 0.5em;
+}
+
+.status {
+    /* Ensure status badges align well within their cells */
+    display: inline-block;
+}
+
+/* Adjustments for very small screens if necessary */
+@media (max-width: 600px) {
+    .downloads-table-header,
+    .download-row {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.85rem;
+    }
+
+    .header-cell {
+        font-size: 0.9em;
+    }
+}

@@ -1,0 +1,104 @@
+/* Styles for the Messages page */
+
+/* Ensure the main messages container allows for sticky footer */
+.messages-page {
+    display: flex;
+    flex-direction: column;
+    height: 100vh; /* Full viewport height */
+    overflow: hidden; /* Hide scrollbars, child elements handle scrolling */
+}
+
+.messages-page .messages-main {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: hidden; /* Hide main scrollbar, messages-list scrolls */
+}
+
+.messages-page .messages-list {
+    flex-grow: 1;
+    overflow-y: auto; /* Enable scrolling for message list */
+    padding: 1rem;
+    padding-bottom: 120px; /* Add padding at the bottom to prevent content being hidden by sticky input */
+    box-sizing: border-box;
+    /* Other existing messages-list styles if any */
+}
+
+/* Styles for the message input form */
+.messages-page .message-input {
+    display: flex;
+    align-items: flex-end; /* Align items to the bottom */
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+    position: sticky; /* Make it stick to the bottom */
+    bottom: 0;
+    width: 100%;
+    z-index: 100; /* Ensure it's above other content */
+    box-sizing: border-box; /* Include padding in width */
+    flex-wrap: wrap; /* Allow items to wrap to next line if needed */
+    gap: 0.5rem; /* Spacing between input elements */
+    flex-shrink: 0; /* Prevent it from shrinking */
+}
+
+.messages-page .message-input input[type="text"] {
+    flex-grow: 1; /* Allow message input to take available space */
+    padding: 0.75rem 1rem;
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    min-height: 40px; /* Ensure a minimum height */
+}
+
+.messages-page .message-input button {
+    padding: 0.75rem 1rem;
+    border-radius: 20px;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    min-width: 60px; /* Ensure send button has min width */
+}
+
+.messages-page .message-input .file-upload-btn {
+    background-color: var(--button-secondary-bg);
+    color: var(--button-secondary-text);
+}
+
+/* Adjust file preview for mobile to prevent it from pushing content out */
+.messages-page .message-input .file-preview {
+    flex-basis: 100%; /* Take full width, forcing it onto its own line */
+    margin-right: 0; /* Remove right margin when on its own line */
+    margin-bottom: 0.5rem; /* Space below preview before next line item */
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--bg-light);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    overflow-x: auto; /* Allow horizontal scroll if content overflows */
+    white-space: nowrap; /* Prevent text wrapping inside if any */
+}
+
+.messages-page .message-input .file-preview img,
+.messages-page .message-input .file-preview video {
+    max-height: 80px; /* Limit height of preview image/video */
+    width: auto; /* Allow width to adjust */
+    border-radius: 4px;
+    object-fit: contain; /* Ensure content is visible */
+}
+
+/* Specific adjustments for smaller screens */
+@media (max-width: 768px) {
+    .messages-page .message-input {
+        padding: 0.5rem; /* Slightly less padding on mobile */
+    }
+
+    .messages-page .messages-list {
+        padding-bottom: 120px; /* More padding at bottom to account for sticky input */
+    }
+}

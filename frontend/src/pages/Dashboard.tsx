@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import '../styles/Dashboard.css';
 
 // Dummy recent searches for demo; replace with your real data source if needed
 const RECENT_SEARCHES = [
