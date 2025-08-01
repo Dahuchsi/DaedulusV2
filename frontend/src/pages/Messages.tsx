@@ -92,7 +92,7 @@ const Messages: React.FC = () => {
     }
     }, []);
 
-    // Fetch messages and mark as read (modified to use setMessages for mobile transition)
+    // Fetch messages and mark as read
     const fetchMessages = useCallback(async (friendId: string) => {
         try {
             const response = await api.get(`/messages/${friendId}`);
@@ -118,7 +118,15 @@ const Messages: React.FC = () => {
     return [...prev, message];
     });
     // Mark as read if the message is for the open conversation
-    api.put(`/messages/${selectedConversation}/read').then(fetchConversations);
+    // Updated to use try-catch for robustness during real-time updates
+    (async () => {
+        try {
+            await api.put(`/messages/${selectedConversation}/read`);
+            fetchConversations(); // Refresh unread counts
+        } catch (err) {
+            console.warn('Failed to mark message as read via real-time update:', err);
+        }
+    })();
     } else {
     fetchConversations();
     }
@@ -158,12 +166,12 @@ const Messages: React.FC = () => {
     if (socket && socket.connected && user) {
     socket.emit('join:user', user.id);
     socket.on('message:new', handleNewMessage);
-    socket.on('message:read', handleMessageRead); // NEW: Listen for read receipts
+    socket.on('message:read', handleMessageRead); // Listen for read receipts
     socket.on('typing:start', handleTypingStart);
     socket.on('typing:stop', handleTypingStop);
     return () => {
     socket.off('message:new', handleNewMessage);
-    socket.off('message:read', handleMessageRead); // NEW: Clean up read receipt listener
+    socket.off('message:read', handleMessageRead); // Clean up read receipt listener
     socket.off('typing:start', handleTypingStart);
     socket.off('typing:stop', handleTypingStop);
     };
@@ -177,12 +185,11 @@ const Messages: React.FC = () => {
 
     // Auto-scroll to bottom (ensure this works reliably)
     useEffect(() => {
-        // Only scroll if it's an actual message addition, not initial load potentially
-        // A small delay often helps ensure content is rendered before scrolling
-        if (messages.length > 0) { // Only scroll if there are messages
+        // Only scroll if there are messages and the ref is available
+        if (messages.length > 0 && messagesEndRef.current) {
             const timer = setTimeout(() => {
-                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); // Use block: 'end'
-            }, 100);
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }, 100); // Small delay to ensure DOM update
             return () => clearTimeout(timer);
         }
     }, [messages]); // Dependency on messages array
@@ -210,91 +217,107 @@ const Messages: React.FC = () => {
     }, 1000);
     };
 
-    // Reset mobile viewport after sending
+    // Reset mobile viewport after sending (ONLY on mobile)
     const resetMobileViewport = () => {
-        if (isMobile && messageInputRef.current) {
+        if (isMobile && messageInputRef.current) { // Only run if mobile
             messageInputRef.current.blur();
-            // Removed window.scrollTo(0, 0) and related overflow logic
-            // as it was causing scroll to top. messagesEndRef handles scrolling.
+            // Removed window.scrollTo(0, 0) as it was causing desktop jumps
         }
     };
 
     // Send message (text, file, or both)
     const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSendError(null);
-    if (!selectedConversation) return;
+        e.preventDefault();
+        setSendError(null);
+        if (!selectedConversation) return;
 
-    // Stop typing indicator
-    if (isTyping && socket) {
-    setIsTyping(false);
-    socket.emit('typing:stop', {
-    recipientId: selectedConversation,
-    userId: user?.id,
-    username: user?.username
-    });
-    }
+        // Stop typing indicator
+        if (isTyping && socket) {
+            setIsTyping(false);
+            socket.emit('typing:stop', {
+                recipientId: selectedConversation,
+                userId: user?.id,
+                username: user?.username
+            });
+        }
 
-    let newMsg: Message | null = null;
+        let newMsg: Message | null = null;
 
-    try {
-    if (selectedFile) {
-    setUploadingFile(true);
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-    formData.append('recipient_id', selectedConversation);
-    if (newMessage.trim()) formData.append('text', newMessage.trim());
+        try {
+            if (selectedFile) {
+                setUploadingFile(true);
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+                formData.append('recipient_id', selectedConversation);
+                if (newMessage.trim()) formData.append('text', newMessage.trim());
 
-    const response = await api.post('/messages/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-    });
+                const response = await api.post('/messages/upload', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
 
-    newMsg = response.data.message || response.data;
-    setSelectedFile(null);
-    setFilePreviewUrl('');
-    setNewMessage('');
-    setUploadingFile(false);
-    } else if (newMessage.trim()) {
-    const response = await api.post('/messages', {
-    recipient_id: selectedConversation,
-    content: newMessage.trim(),
-    message_type: 'text'
-    });
-    newMsg = response.data;
-    setNewMessage('');
-    }
-    } catch (error: any) {
-    setUploadingFile(false);
-    if (
-    error?.response?.status !== 409 &&
-    error?.message !== 'Network Error'
-    ) {
-    setSendError('Failed to send message');
-    } else {
-    setSendError(null);
-    }
-    console.error('Failed to send message:', error);
-    return;
-    }
+                newMsg = response.data.message || response.data;
+                setSelectedFile(null);
+                setFilePreviewUrl('');
+                setNewMessage('');
+                setUploadingFile(false);
+            } else if (newMessage.trim()) {
+                const response = await api.post('/messages', {
+                    recipient_id: selectedConversation,
+                    content: newMessage.trim(),
+                    message_type: 'text'
+                });
+                newMsg = response.data;
+                setNewMessage('');
+            }
+        } catch (error: any) {
+            setUploadingFile(false);
+            if (
+                error?.response?.status !== 409 &&
+                error?.message !== 'Network Error'
+            ) {
+                setSendError('Failed to send message');
+            } else {
+                setSendError(null);
+            }
+            console.error('Failed to send message:', error);
+            return; // Exit if initial send fails
+        }
 
-    try {
-    if (newMsg) {
-    setMessages(prev => {
-    const exists = prev.some(m => m.id === newMsg!.id);
-    if (exists) return prev;
-    return [...prev, newMsg!];
-    });
-    await api.put(`/messages/${selectedConversation}/read`).catch(err => {
-    console.warn('Failed to mark as read:', err);
-    });
-    await fetchConversations().catch(err => {
-    console.warn('Failed to refresh conversations:', err);
-    });
-    }
-    resetMobileViewport();
-    } catch (err) {
-    console.warn('Post-send follow-up failed:', err);
-    }
+        // --- Refactored Post-send Follow-up with separate try-catch blocks ---
+        // This block ensures messages are updated locally and read status is sent
+        // regardless of potential issues with fetchConversations or markAsRead.
+        // Each await call is now self-contained for error handling, which helps with transpilation.
+        try {
+            if (newMsg) {
+                setMessages(prev => {
+                    const exists = prev.some(m => m.id === newMsg!.id);
+                    if (exists) return prev;
+                    return [...prev, newMsg!];
+                });
+
+                // Explicit try-catch for marking as read
+                try {
+                    await api.put(`/messages/${selectedConversation}/read`);
+                } catch (err) {
+                    console.warn('Failed to mark as read:', err);
+                }
+
+                // Explicit try-catch for refreshing conversations
+                try {
+                    await fetchConversations();
+                } catch (err) {
+                    console.warn('Failed to refresh conversations:', err);
+                }
+            }
+            // `resetMobileViewport()` is intentionally placed after API calls and state updates
+            // to allow scrollIntoView to happen correctly, and now only for mobile.
+            if (isMobile) {
+                resetMobileViewport();
+            }
+        } catch (err) {
+            console.warn('Post-send follow-up failed:', err);
+            // No setSendError here as message itself was already sent successfully
+        }
     };
 
     // Handle file selection and preview
@@ -526,7 +549,7 @@ const Messages: React.FC = () => {
                             <div className="message-time">
                                 {formatMessageTime(message.created_at)}
                             </div>
-                            {/* Read receipt: show other user's profile pic under the last read message */}
+                            {/* Read receipt: show other user's profile pic under the last message sent by user and read by other user */}
                             {message.id === lastReadMessageId && otherUser && (
                             <div style={{
                                 position: 'absolute',
@@ -581,7 +604,7 @@ const Messages: React.FC = () => {
                                 ) : (
                                 <span style={{ fontSize: 14 }}>{selectedFile.name}</span>
                                 )}
-                                <button type="button" onClick={() => { setSelectedFile(null); setFilePreviewUrl(''); }} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18 }}>✖</button>
+                                <button type="button" onClick={() => { setSelectedFile(null); setFilePreviewUrl(''); }}>✖</button>
                             </div>
                         )}
 
@@ -612,10 +635,7 @@ const Messages: React.FC = () => {
                             }}
                             placeholder="Type a message..."
                             disabled={uploadingFile}
-                            style={{
-                            fontSize: isMobile ? '16px' : '1rem'
-                            }}
-                        />
+                            />
                         <button type="submit" disabled={uploadingFile}>
                             Send
                         </button>
@@ -628,11 +648,7 @@ const Messages: React.FC = () => {
                 </div>
             )}
 
-            {/* This block is only shown if not mobile AND no conversation selected.
-                It can be removed or restructured if you want the "no conversation selected"
-                message to appear differently on desktop, or if the conversations sidebar
-                is always visible on desktop.
-            */}
+            {/* This 'no-conversation' block is shown if no conversation is selected AND not on mobile */}
             {!selectedConversation && !isMobile && (
                 <div className="no-conversation">
                     <div style={{ textAlign: 'center', marginTop: '40vh' }}>

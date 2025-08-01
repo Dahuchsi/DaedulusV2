@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
+import { useAuth } from '../contexts/AuthContext'; // Import useAuth to access user
 
 interface UserStats {
     total_users: number;
@@ -62,6 +63,8 @@ const Admin: React.FC = () => {
     const [messageLogs, setMessageLogs] = useState<MessageLogEntry[]>([]);
     const [activeTab, setActiveTab] = useState('overview');
     const [loading, setLoading] = useState(false);
+
+    const { user } = useAuth(); // Destructure user from useAuth() hook
 
     // Helper function to format dates safely
     const formatDate = (dateString: string | null | undefined): string => {
@@ -238,7 +241,6 @@ const Admin: React.FC = () => {
         }
     };
 
-    // NEW: Function to handle changing user password
     const handleChangeUserPassword = async (userId: string, username: string) => {
         const newPassword = prompt(`Enter new password for user "${username}":`);
 
@@ -268,7 +270,6 @@ const Admin: React.FC = () => {
         }
     };
 
-    // Helper for message content formatting for logs
     const formatMessageLogContent = (log: MessageLogEntry) => {
         switch (log.message_type) {
             case 'image':
@@ -638,7 +639,8 @@ const Admin: React.FC = () => {
                         <div className="loading">Loading message logs...</div>
                     ) : (
                         <div className="message-logs-conversations">
-                            {(() => {
+                            {/* Group messages by conversation (sender_id and recipient_id pair) */}
+                            {((currentUserFromAuth) => { // IIFE now accepts 'currentUserFromAuth' as an argument
                                 const conversationsMap = new Map<string, MessageLogEntry[]>();
                                 messageLogs.forEach(log => {
                                     const convoKey = [log.sender_id, log.recipient_id].sort().join('-');
@@ -655,7 +657,7 @@ const Admin: React.FC = () => {
                                             {logs.map(log => (
                                                 <div
                                                     key={log.id}
-                                                    className={`message-log-item ${log.sender_id === user?.id ? 'sent' : 'received'}`}
+                                                    className={`message-log-item ${log.sender_id === currentUserFromAuth?.id ? 'sent' : 'received'}`} // Use currentUserFromAuth
                                                 >
                                                     <div className="message-log-content">
                                                         <strong>{log.sender_username}:</strong> {formatMessageLogContent(log)}
@@ -668,7 +670,7 @@ const Admin: React.FC = () => {
                                         </div>
                                     </div>
                                 ));
-                            })()}
+                            })(user)} {/* Pass the 'user' variable from the outer scope to the IIFE */}
                             {messageLogs.length === 0 && (
                                 <p style={{ textAlign: 'center', padding: '2rem' }}>No message logs found.</p>
                             )}
