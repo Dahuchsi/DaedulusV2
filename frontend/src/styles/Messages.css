@@ -1,55 +1,30 @@
 /*
- * Combined Styles for the Messages Component
+ * Consolidated Styles for the Messages Component
  *
  * This file integrates the original CSS with a refined dark mode
  * implementation and mobile keyboard fixes. It avoids using !important
  * where possible to ensure better maintainability.
  */
 
-/* --- Root Variables and Dark Mode --- */
-
-/* Default (Light Mode) Variables */
+/* --- Root Variables for this component (can override global ones) --- */
 :root {
-  --background: #f3f4f6; /* Used for the main page background */
-  --card-background: #ffffff; /* Used for component containers like sidebar and main chat */
-  --text-primary: #111827; /* Main text color */
-  --text-secondary: #6b7280; /* Secondary text color (e.g., timestamps) */
-  --border-color: #e5e7eb; /* Border color for dividers */
-  --primary-color: #2563eb; /* Primary accent color (e.g., sent messages) */
-  --secondary-color: #4b5563; /* For file upload button */
-
-  /* Specific message bubble colors */
-  --message-received-light: #e5e7eb;
-  --message-sent-light: var(--primary-color);
+  /* Default (Light Mode) */
+  --messages-bg: var(--background);
+  --messages-card-bg: var(--card-background);
+  --message-sent-bg: var(--primary-color);
+  --message-sent-text: white;
+  --message-received-bg: #e5e7eb;
+  --message-received-text: var(--text-primary);
 }
 
-/* Dark Mode Variables */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0f172a;
-    --card-background: #1e293b;
-    --text-primary: #f9fafb;
-    --text-secondary: #9ca3af;
-    --border-color: #334155;
-    --primary-color: #3b82f6;
-    --secondary-color: #6b7280;
-
-    /* Dark mode specific message bubble colors */
-    --message-received-dark: #374151;
-    --message-sent-dark: var(--primary-color);
-  }
-
-  /*
-   * Overriding specific elements for a cleaner dark mode experience.
-   * Using variables ensures consistency.
-   */
-  .messages-page {
-    background-color: var(--background);
-  }
-
-  .conversations-sidebar,
-  .messages-main {
-    background-color: var(--card-background);
+    --messages-bg: var(--background);
+    --messages-card-bg: var(--card-background);
+    --message-sent-bg: var(--primary-color);
+    --message-sent-text: white;
+    --message-received-bg: #374151; /* Darker grey for received */
+    --message-received-text: #f9fafb;
   }
 }
 
@@ -60,7 +35,7 @@
   height: calc(100vh - var(--navbar-height, 4rem));
   gap: 1rem;
   overflow: hidden;
-  background-color: var(--background);
+  background-color: var(--messages-bg);
   border-radius: 0.5rem;
 }
 
@@ -79,7 +54,7 @@
 
 .conversations-sidebar {
   width: 300px;
-  background-color: var(--card-background);
+  background-color: var(--messages-card-bg);
   border-radius: 0.5rem;
   padding: 1rem;
   overflow-y: auto;
@@ -100,12 +75,12 @@
 
 .messages-main {
   flex: 1;
-  background-color: var(--card-background);
+  background-color: var(--messages-card-bg);
   border-radius: 0.5rem;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  position: relative; /* Crucial for positioning sticky/fixed children */
+  position: relative;
 }
 
 @media (max-width: 768px) {
@@ -125,7 +100,7 @@
   padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
-  background-color: var(--card-background);
+  background-color: var(--messages-card-bg);
   position: sticky;
   top: 0;
   z-index: 50;
@@ -144,13 +119,12 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding-bottom: 1rem; /* Base padding */
+  padding-bottom: 6rem;
   scroll-behavior: smooth;
 }
 
 @media (max-width: 768px) {
   .messages-list {
-    /* Create space for the fixed input bar on mobile */
     padding-bottom: 100px;
   }
 }
@@ -172,25 +146,15 @@
 .message-content {
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
-  word-wrap: break-word; /* Ensure long words break */
-  white-space: pre-wrap; /* Preserve whitespace and line breaks */
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  background-color: var(--message-received-bg);
+  color: var(--message-received-text);
 }
 
-/* Message content colors (overrides light mode default) */
 .message.sent .message-content {
-  background-color: var(--primary-color);
-  color: white;
-}
-
-.message.received .message-content {
-  background-color: #3a3b3c;
-  color: #fff;
-}
-
-@media (prefers-color-scheme: dark) {
-  .message.received .message-content {
-    background-color: var(--message-received-dark);
-  }
+  background-color: var(--message-sent-bg);
+  color: var(--message-sent-text);
 }
 
 .message-time {
@@ -206,7 +170,7 @@
   align-items: center;
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--border-color);
-  background-color: var(--card-background);
+  background-color: var(--messages-card-bg);
   width: 100%;
   box-sizing: border-box;
   flex-wrap: wrap;
@@ -217,7 +181,7 @@
 
 @media (max-width: 768px) {
   .messages-page.mobile .message-input {
-    position: fixed; /* Use fixed for mobile to ensure it stays on top of keyboard */
+    position: fixed;
     bottom: 0;
     left: 0;
     padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
@@ -226,7 +190,6 @@
 
 /* File preview styling */
 .messages-page .message-input .file-preview {
-  /* REVISED STYLES FOR FILE PREVIEW */
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -235,9 +198,8 @@
   background-color: var(--background);
   box-sizing: border-box;
   
-  /* Make the preview a compact, in-line element */
   width: auto;
-  max-width: 50%; /* Prevent it from getting too large */
+  max-width: 50%;
   flex-shrink: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -246,7 +208,7 @@
 
 .messages-page .message-input .file-preview img,
 .messages-page .message-input .file-preview video {
-    height: 40px; /* Thumbnail height */
+    height: 40px;
     width: auto;
     border-radius: 6px;
     object-fit: cover;
@@ -268,7 +230,7 @@
 }
 
 .messages-page .message-input input[type="file"] {
-  display: none; /* Hide the actual file input */
+  display: none;
 }
 
 /* Input and buttons styling */
@@ -299,7 +261,7 @@
   padding: 0.75rem 1rem;
   border-radius: 20px;
   border: 1px solid var(--border-color);
-  background-color: var(--card-background);
+  background-color: var(--input-bg);
   color: var(--text-primary);
   min-height: 40px;
 }
@@ -308,7 +270,7 @@
   margin-left: auto;
 }
 
-/* Conversation item styles */
+/* --- Conversation List --- */
 .conversation-item {
   display: flex;
   align-items: center;
@@ -370,7 +332,7 @@
   text-align: center;
 }
 
-/* Typing indicator styles */
+/* --- Typing Indicator --- */
 .typing-indicator {
   display: flex;
   align-items: center;
@@ -413,7 +375,7 @@
   font-style: italic;
 }
 
-/* No conversation selected state */
+/* --- No conversation selected state --- */
 .no-conversation {
   display: flex;
   align-items: center;
@@ -423,7 +385,7 @@
   color: var(--text-secondary);
 }
 
-/* Mobile grid layout for conversations */
+/* --- Mobile Specific Styles --- */
 @media (max-width: 768px) {
   .conversations-list.mobile-grid {
     display: grid;
@@ -447,7 +409,7 @@
   }
 }
 
-/* Dark mode specific overrides */
+/* Dark mode specific overrides for Messages component */
 @media (prefers-color-scheme: dark) {
   .conversation-item:not(.active):not(:hover) h4 {
     color: var(--text-primary);
