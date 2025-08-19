@@ -336,7 +336,7 @@ const Downloads: React.FC = () => {
                 <button className={filter === 'failed' ? 'active' : ''} onClick={() => setFilter('failed')}>
                     Failed ({downloads.filter(d => d.status === 'failed').length})
                 </button>
-                 {/* Optional: Add a filter for cancelled downloads */}
+                {/* Optional: Add a filter for cancelled downloads */}
                 <button className={filter === 'cancelled' ? 'active' : ''} onClick={() => setFilter('cancelled')}>
                     Cancelled ({downloads.filter(d => d.status === 'cancelled').length})
                 </button>
@@ -376,43 +376,43 @@ const Downloads: React.FC = () => {
                                         }
                                     </span>
                                 </div>
-                                
-                                {/* --- BUTTON LOGIC AREA --- */}
-                                <div className="download-actions" style={{ marginTop: '0.5rem' }}>
-                                    {/* FAILED aDOWNLOADS */}
-                                    {download.status === 'failed' && (
-                                        <>
-                                            <button
-                                                onClick={() => retryDownload(download.id)}
-                                                className="btn-primary"
-                                                style={{ marginRight: '0.5rem', padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
-                                            >
-                                                🔄 Retry
-                                            </button>
-                                            <button
-                                                onClick={() => checkAllDebridStatus(download.id)}
-                                                className="btn-secondary"
-                                                style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
-                                            >
-                                                🔍 Check AllDebrid
-                                            </button>
-                                        </>
-                                    )}
-
-                                    {/* ACTIVE DOWNLOADS (NEW CANCEL BUTTON HERE) */}
-                                    {['queued', 'debriding', 'transferring'].includes(download.status) && (
+                            </div>
+                            
+                            {/* --- THIS BLOCK WAS MOVED --- */}
+                            <div className="download-actions" style={{ marginTop: '0.5rem' }}>
+                                {/* FAILED DOWNLOADS */}
+                                {download.status === 'failed' && (
+                                    <>
                                         <button
-                                            onClick={() => cancelDownload(download.id)}
-                                            className="btn-danger"
+                                            onClick={() => retryDownload(download.id)}
+                                            className="btn-primary"
+                                            style={{ marginRight: '0.5rem', padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
+                                        >
+                                            🔄 Retry
+                                        </button>
+                                        <button
+                                            onClick={() => checkAllDebridStatus(download.id)}
+                                            className="btn-secondary"
                                             style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
                                         >
-                                            ❌ Cancel
+                                            🔍 Check AllDebrid
                                         </button>
-                                    )}
-                                </div>
-                                 {/* --- END BUTTON LOGIC AREA --- */}
+                                    </>
+                                )}
 
+                                {/* ACTIVE DOWNLOADS (CANCEL BUTTON) */}
+                                {['queued', 'debriding', 'transferring'].includes(download.status) && (
+                                    <button
+                                        onClick={() => cancelDownload(download.id)}
+                                        className="btn-danger"
+                                        style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
+                                    >
+                                        ❌ Cancel
+                                    </button>
+                                )}
                             </div>
+                             {/* --- END MOVED BLOCK --- */}
+                            
                             {download.status === 'debriding' && (
                                 <div className="download-progress">
                                     <RealTimeProgressBar
