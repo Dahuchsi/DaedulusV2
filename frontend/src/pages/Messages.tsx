@@ -1,4 +1,3 @@
-// This is the full, corrected Messages.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -59,12 +58,10 @@ const Messages: React.FC = () => {
     }
   }, []);
 
-  // UseEffect for initial and new message scrolling
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // Fix for mobile viewport changes (keyboard open)
   useEffect(() => {
     if (!messagesListRef.current) return;
 
@@ -80,7 +77,6 @@ const Messages: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, [scrollToBottom]);
 
-  // Detect mobile device
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth <= 768);
     checkMobile();
@@ -222,8 +218,11 @@ const Messages: React.FC = () => {
     }, 1000);
   };
 
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const sendMessage = async (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+    }
+    
     setSendError(null);
     if (!selectedConversation || (!newMessage.trim() && !selectedFile)) return;
 
@@ -327,7 +326,7 @@ const Messages: React.FC = () => {
               display: 'block',
             }}
             onClick={() => window.open(message.content, '_blank')}
-            onLoad={scrollToBottom} // <--- ADDED: Trigger scroll on image load
+            onLoad={scrollToBottom}
           />
         );
       case 'file': {
@@ -344,7 +343,7 @@ const Messages: React.FC = () => {
                 maxHeight: isMobile ? '200px' : '250px',
                 borderRadius: '8px',
               }}
-              onLoadedData={scrollToBottom} // <--- ADDED: Trigger scroll on video load
+              onLoadedData={scrollToBottom}
             />
           );
         }
@@ -503,7 +502,9 @@ const Messages: React.FC = () => {
               )}
             </div>
             {socket && socket.connected && (
-              <span style={{ color: '#28a745', fontSize: '0.8rem' }}>● Live messaging</span>
+              <div className="status-dot-container">
+                  <span className="status-dot"></span>
+              </div>
             )}
           </div>
 
@@ -614,6 +615,10 @@ const Messages: React.FC = () => {
               }}
               placeholder="Type a message..."
               disabled={uploadingFile}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
             />
             <button type="submit" disabled={uploadingFile || (!newMessage.trim() && !selectedFile)}>
               Send
