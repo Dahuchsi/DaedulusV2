@@ -106,7 +106,7 @@ class DownloadManager {
         const interval = setInterval(async () => {
             try {
                 const download = await Download.findByPk(downloadId);
-                if (!download || ['completed', 'failed'].includes(download.status)) {
+                if (!download || ['completed', 'failed', 'cancelled'].includes(download.status)) {
                     console.log(`Download ${downloadId} finished monitoring (status: ${download?.status})`);
                     clearInterval(interval);
                     this.activeDownloads.delete(downloadId);
@@ -186,6 +186,47 @@ class DownloadManager {
 
         this.activeDownloads.set(downloadId, interval);
     }
+
+    // --- NEW CANCEL FUNCTION ---
+    async cancelDownload(downloadId) {
+        const download = await Download.findByPk(downloadId);
+        if (!download) {
+            console.error(`Cancel request for non-existent download ID: ${downloadId}`);
+            return { success: false, message: 'Download not found' };
+        }
+
+        // Stop the monitoring interval if it exists
+        if (this.activeDownloads.has(downloadId)) {
+            clearInterval(this.activeDownloads.get(downloadId));
+            this.activeDownloads.delete(downloadId);
+            console.log(`Cleared active monitoring interval for download ${downloadId}.`);
+        }
+
+        // Clean up any transfer stats
+        if (this.transferStats.has(downloadId)) {
+            this.transferStats.delete(downloadId);
+            console.log(`Cleared transfer stats for download ${downloadId}.`);
+        }
+
+        // Update status to 'cancelled'. This will also stop any active transfer loops.
+        await download.update({ status: 'cancelled', download_speed: 0 });
+        console.log(`Download ${downloadId} status updated to 'cancelled'.`);
+
+        // Notify the frontend
+        if (this.io) {
+            this.io.to(`user_${download.user_id}`).emit('download:cancelled', {
+                downloadId: download.id,
+            });
+            // Send a final update to refresh the UI state
+            this.io.to(`user_${download.user_id}`).emit('download:progress', {
+                downloadId: download.id,
+                status: 'cancelled'
+            });
+        }
+        
+        return { success: true, message: 'Download cancelled successfully.' };
+    }
+    // --- END OF NEW FUNCTION ---
 
     async supportsPartialDownload(url) {
         try {
@@ -385,9 +426,18 @@ class DownloadManager {
                 }
             }, 2000);
 
-            let completedFiles = completeFiles.length;
+            let completedFileCount = completeFiles.length;
 
             for (let i = 0; i < filesToProcess.length; i++) {
+                 // Check status before each file download
+                const currentDownloadState = await Download.findByPk(downloadId);
+                if (currentDownloadState.status === 'cancelled') {
+                    console.log(`Download ${downloadId} was cancelled. Halting transfer.`);
+                    clearInterval(transferInterval);
+                    this.transferStats.delete(downloadId);
+                    return; // Exit the loop
+                }
+
                 const file = filesToProcess[i];
                 const isPartialResume = file.existing && file.existing.isPartial;
 
@@ -427,14 +477,14 @@ class DownloadManager {
                         );
                     }
 
-                    completedFiles++;
+                    completedFileCount++;
 
-                    const transferProgress = (completedFiles / totalFiles) * 100;
+                    const transferProgress = (completedFileCount / totalFiles) * 100;
                     await download.update({
                         transfer_progress: parseFloat(transferProgress.toFixed(2))
                     });
 
-                    console.log(`✅ File completed. Overall progress: ${transferProgress.toFixed(2)}% (${completedFiles}/${totalFiles} files)`);
+                    console.log(`✅ File completed. Overall progress: ${transferProgress.toFixed(2)}% (${completedFileCount}/${totalFiles} files)`);
 
                 } else {
                     console.error(`❌ Failed to unlock link: ${file.link}`);
@@ -443,6 +493,13 @@ class DownloadManager {
 
             clearInterval(transferInterval);
             this.transferStats.delete(downloadId);
+
+             // Final check before marking as complete
+            const finalDownloadState = await Download.findByPk(downloadId);
+            if (finalDownloadState.status === 'cancelled') {
+                console.log(`Transfer for ${downloadId} finished, but was already cancelled.`);
+                return;
+            }
 
             await download.update({
                 status: 'completed',
@@ -463,7 +520,7 @@ class DownloadManager {
         } catch (error) {
             console.error(`Transfer error for download ${downloadId}:`, error);
             const download = await Download.findByPk(downloadId);
-            if (download) {
+            if (download && download.status !== 'cancelled') {
                 await download.update({ status: 'failed' });
             }
             this.transferStats.delete(downloadId);
@@ -501,7 +558,7 @@ class DownloadManager {
 
             if (response.status !== 206) {
                 console.log(`⚠️  Server didn't return partial content (status: ${response.status})`);
-                writer.destroy();
+                writer.end(); // Use end instead of destroy
                 return false;
             }
 

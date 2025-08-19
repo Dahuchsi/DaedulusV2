@@ -18,15 +18,15 @@ interface Download {
     alldebrid_id?: string;
 }
 
-// Real-time progress bar component (Simplified for direct display) 
+// Real-time progress bar component (Simplified for direct display)
 const RealTimeProgressBar: React.FC<{
     progress: number;
     speed: number;
     fileSize?: number; // Keep for display if needed
     status: string;
 }> = ({ progress, speed, fileSize, status }) => {
-    // No local state or animation needed here. 
-    // The `progress` prop directly reflects the most recent value from the parent. 
+    // No local state or animation needed here.
+    // The `progress` prop directly reflects the most recent value from the parent.
 
     return (
         <div className="progress-bar">
@@ -35,7 +35,7 @@ const RealTimeProgressBar: React.FC<{
                 style={{
                     width: `${progress}%`, // Directly use the provided progress
                     backgroundColor: progress > 0 ? '#2563eb' : '#e5e7eb',
-                    transition: 'width 0.3s ease-out' // Smooth transition when progress updates 
+                    transition: 'width 0.3s ease-out' // Smooth transition when progress updates
                 }}
             />
         </div>
@@ -75,26 +75,6 @@ const Downloads: React.FC = () => {
         const units = ['B', 'KB', 'MB', 'GB', 'TB'];
         const index = Math.floor(Math.log(bytes) / Math.log(1024));
         return `${(bytes / Math.pow(1024, index)).toFixed(2)} ${units[index]}`;
-    };
-
-    // Function to retry failed downloads
-    const retryDownload = async (downloadId: string) => {
-        try {
-            await api.post(`/downloads/${downloadId}/retry`);
-            fetchDownloads();
-        } catch (error: any) {
-            alert(`Failed to retry download: ${error.response?.data?.error || error.message}`);
-        }
-    };
-
-    // Function to manually check AllDebrid status
-    const checkAllDebridStatus = async (downloadId: string) => {
-        try {
-            await api.post(`/downloads/${downloadId}/check-status`);
-            fetchDownloads();
-        } catch (error: any) {
-            alert(`Failed to check status: ${error.response?.data?.error || error.message}`);
-        }
     };
 
     const fetchDownloads = useCallback(async () => {
@@ -209,17 +189,62 @@ const Downloads: React.FC = () => {
                 setLastUpdate(new Date().toLocaleTimeString());
             };
 
+            // NEW: Handle cancellation event
+            const handleDownloadCancelled = (data: { downloadId: string }) => {
+                setDownloads(prev => prev.map(download => {
+                    if (download.id === data.downloadId) {
+                        return { ...download, status: 'cancelled' };
+                    }
+                    return download;
+                }));
+                setLastUpdate(new Date().toLocaleTimeString());
+            };
+
             socket.on('download:progress', handleDownloadProgress);
             socket.on('download:complete', handleDownloadComplete);
             socket.on('download:failed', handleDownloadFailed);
+            socket.on('download:cancelled', handleDownloadCancelled); // Listen for the new event
 
             return () => {
                 socket.off('download:progress', handleDownloadProgress);
                 socket.off('download:complete', handleDownloadComplete);
                 socket.off('download:failed', handleDownloadFailed);
+                socket.off('download:cancelled', handleDownloadCancelled); // Clean up listener
             };
         }
     }, [socket, fetchDownloads]);
+    
+    // --- NEW FUNCTION: Cancel a download ---
+    const cancelDownload = async (downloadId: string) => {
+        try {
+            await api.post(`/downloads/${downloadId}/cancel`);
+            // The websocket event will update the UI, but we can also optimistically update or refetch
+            fetchDownloads();
+        } catch (error: any) {
+            alert(`Failed to cancel download: ${error.response?.data?.error || error.message}`);
+        }
+    };
+    // --- END OF NEW FUNCTION ---
+
+    // Function to retry failed downloads
+    const retryDownload = async (downloadId: string) => {
+        try {
+            await api.post(`/downloads/${downloadId}/retry`);
+            fetchDownloads();
+        } catch (error: any) {
+            alert(`Failed to retry download: ${error.response?.data?.error || error.message}`);
+        }
+    };
+
+    // Function to manually check AllDebrid status
+    const checkAllDebridStatus = async (downloadId: string) => {
+        try {
+            await api.post(`/downloads/${downloadId}/check-status`);
+            fetchDownloads();
+        } catch (error: any) {
+            alert(`Failed to check status: ${error.response?.data?.error || error.message}`);
+        }
+    };
 
     const getStatusText = (download: Download) => {
         try {
@@ -236,6 +261,8 @@ const Downloads: React.FC = () => {
                     return 'Completed';
                 case 'failed':
                     return 'Failed';
+                case 'cancelled': // NEW
+                    return 'Cancelled';
                 default:
                     return download.status ? download.status.charAt(0).toUpperCase() + download.status.slice(1) : 'Unknown';
             }
@@ -247,6 +274,7 @@ const Downloads: React.FC = () => {
     const filteredDownloads = downloads.filter(d => {
         if (filter === 'all') return true;
         if (filter === 'active') return ['queued', 'debriding', 'transferring'].includes(d.status);
+        if (filter === 'cancelled') return d.status === 'cancelled'; // NEW filter view
         return d.status === filter;
     });
 
@@ -308,6 +336,10 @@ const Downloads: React.FC = () => {
                 <button className={filter === 'failed' ? 'active' : ''} onClick={() => setFilter('failed')}>
                     Failed ({downloads.filter(d => d.status === 'failed').length})
                 </button>
+                 {/* Optional: Add a filter for cancelled downloads */}
+                <button className={filter === 'cancelled' ? 'active' : ''} onClick={() => setFilter('cancelled')}>
+                    Cancelled ({downloads.filter(d => d.status === 'cancelled').length})
+                </button>
             </div>
             <div className="downloads-list">
                 {filteredDownloads.length === 0 ? (
@@ -344,24 +376,42 @@ const Downloads: React.FC = () => {
                                         }
                                     </span>
                                 </div>
-                                {download.status === 'failed' && (
-                                    <div className="download-actions" style={{ marginTop: '0.5rem' }}>
+                                
+                                {/* --- BUTTON LOGIC AREA --- */}
+                                <div className="download-actions" style={{ marginTop: '0.5rem' }}>
+                                    {/* FAILED aDOWNLOADS */}
+                                    {download.status === 'failed' && (
+                                        <>
+                                            <button
+                                                onClick={() => retryDownload(download.id)}
+                                                className="btn-primary"
+                                                style={{ marginRight: '0.5rem', padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
+                                            >
+                                                🔄 Retry
+                                            </button>
+                                            <button
+                                                onClick={() => checkAllDebridStatus(download.id)}
+                                                className="btn-secondary"
+                                                style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
+                                            >
+                                                🔍 Check AllDebrid
+                                            </button>
+                                        </>
+                                    )}
+
+                                    {/* ACTIVE DOWNLOADS (NEW CANCEL BUTTON HERE) */}
+                                    {['queued', 'debriding', 'transferring'].includes(download.status) && (
                                         <button
-                                            onClick={() => retryDownload(download.id)}
-                                            className="btn-primary"
-                                            style={{ marginRight: '0.5rem', padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
-                                        >
-                                            🔄 Retry
-                                        </button>
-                                        <button
-                                            onClick={() => checkAllDebridStatus(download.id)}
-                                            className="btn-secondary"
+                                            onClick={() => cancelDownload(download.id)}
+                                            className="btn-danger"
                                             style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
                                         >
-                                            🔍 Check AllDebrid
+                                            ❌ Cancel
                                         </button>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
+                                 {/* --- END BUTTON LOGIC AREA --- */}
+
                             </div>
                             {download.status === 'debriding' && (
                                 <div className="download-progress">
@@ -394,7 +444,7 @@ const Downloads: React.FC = () => {
                                         <span>{formatSpeed(download.download_speed)}</span>
                                     </div>
                                     <span className="progress-label">
-                                        ⬇️ Downloading to your PC
+                                       ⬇️ Downloading to your PC
                                         {(socket && socket.connected) && <span style={{ color: '#28a745', marginLeft: '0.5rem' }}>● Live</span>}
                                     </span>
                                 </div>

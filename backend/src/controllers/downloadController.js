@@ -86,7 +86,34 @@ const downloadController = {
         }
     },
 
-    // NEW: Retry failed downloads
+    // --- NEW FUNCTION TO CANCEL DOWNLOADS ---
+    async cancelDownload(req, res, next) {
+        try {
+            const { id } = req.params;
+            const download = await Download.findOne({ where: { id, user_id: req.user.id } });
+
+            if (!download) {
+                return res.status(404).json({ error: 'Download not found' });
+            }
+            
+            console.log(`Cancel request received for download: ${download.torrent_name}`);
+
+            const result = await downloadManager.cancelDownload(download.id);
+
+            if (result.success) {
+                res.json({ message: result.message });
+            } else {
+                res.status(400).json({ error: result.message });
+            }
+        } catch (error) {
+            console.error('❌ Cancel download error:', error.message);
+            console.error('Full error:', error);
+            res.status(500).json({ error: 'Failed to cancel download', detail: error.message });
+        }
+    },
+    // --- END NEW FUNCTION ---
+
+    // Retain existing retry logic
     async retryDownload(req, res, next) {
         try {
             const { id } = req.params;
@@ -118,7 +145,7 @@ const downloadController = {
         }
     },
 
-    // NEW: Check AllDebrid status manually
+    // Retain existing check status logic
     async checkAllDebridStatus(req, res, next) {
         try {
             const { id } = req.params;
@@ -134,7 +161,6 @@ const downloadController = {
 
             console.log(`Checking AllDebrid status for: ${download.torrent_name} (ID: ${download.alldebrid_id})`);
 
-            // Force check AllDebrid status
             const statusResponse = await alldebridService.getMagnetStatus(download.alldebrid_id);
 
             if (statusResponse.status === 'success') {
@@ -147,8 +173,6 @@ const downloadController = {
                         status: 'transferring',
                         debriding_progress: 100.00
                     });
-
-                    // Restart the download process from transferring
                     downloadManager.continueTransfer(download.id, download.alldebrid_id);
 
                 } else if (magnetStatus.status === 'Downloading') {
@@ -158,8 +182,6 @@ const downloadController = {
                         status: 'debriding',
                         debriding_progress: parseFloat(progress.toFixed(2))
                     });
-
-                    // Resume monitoring
                     downloadManager.monitorDownload(download.id, download.alldebrid_id);
 
                 } else if (magnetStatus.status === 'Error') {
@@ -167,7 +189,6 @@ const downloadController = {
                     await download.update({ status: 'failed' });
                 }
 
-                // Refresh the download object
                 await download.reload();
                 res.json({ message: 'Status check completed', download });
             } else {
