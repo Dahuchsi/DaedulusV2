@@ -75,17 +75,17 @@ const Search: React.FC = () => {
     };
 
     // Log search to backend
-    const logSearch = async (searchQuery: string) => {
-        try {
-            await api.post('/log-search', {
-                username: user?.username || 'anonymous',
-                query: searchQuery
-            });
-        } catch (err) {
-            // Logging should not block UI
-            console.error('Failed to log search:', err);
-        }
-    };
+const logSearch = async (searchQuery: string) => {
+    try {
+        await api.post('/search/log-search', {   // 👈 changed path here
+            username: user?.username || 'anonymous',
+            query: searchQuery
+        });
+    } catch (err) {
+        // Logging should not block UI
+        console.error('Failed to log search:', err);
+    }
+};
 
     const handleSearch = async (e?: React.FormEvent, searchQuery?: string) => {
         if (e) e.preventDefault();

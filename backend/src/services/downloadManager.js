@@ -8,11 +8,38 @@ const { Download } = require('../models');
 
 const parseSizeInBytes = (sizeString) => {
     if (!sizeString || typeof sizeString !== 'string') return 0;
-    const units = { 'B': 1, 'KB': 1024, 'MB': 1024 * 1024, 'GB': 1024 * 1024 * 1024, 'TB': 1024 * 1024 * 1024 * 1024 };
-    const match = sizeString.match(/^(\d+(?:\.\d+)?)\s*([KMGT]?B)$/i);
-    if (!match) return 0;
+
+    // 1) Normalize spacing and case
+    let size = sizeString.replace(/\u00A0/g, ' ') // replace &nbsp;
+                         .replace(/,/g, '.')      // replace comma decimal with dot
+                         .trim()
+                         .toUpperCase();
+
+    // 2) Handle "MiB" → "MB", "GiB" → "GB", etc.
+    size = size.replace(/MIB/g, 'MB')
+               .replace(/GIB/g, 'GB')
+               .replace(/TIB/g, 'TB')
+               .replace(/KIB/g, 'KB');
+
+    // 3) Extract number and unit
+    const match = size.match(/([\d.]+)\s*([KMGT]?B)/i);
+    if (!match) {
+        // If no match (e.g. "Unknown") just return 0
+        return 0;
+    }
+
     const value = parseFloat(match[1]);
     const unit = match[2].toUpperCase();
+
+    // 4) Convert into bytes
+    const units = {
+        'B': 1,
+        'KB': 1024,
+        'MB': 1024 * 1024,
+        'GB': 1024 * 1024 * 1024,
+        'TB': 1024 * 1024 * 1024 * 1024
+    };
+
     return Math.round(value * (units[unit] || 1));
 };
 
