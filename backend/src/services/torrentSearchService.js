@@ -1,6 +1,6 @@
 const axios = require('axios');
 const cloudscraper = require('cloudscraper');
-const cheerio = require('cheerio'); // 👈 make sure to install (npm install cheerio)
+const cheerio = require('cheerio');
 const { TORRENT_APIS, TORRENT_MIRRORS } = require('../config/constants');
 const TorrentSearchApi = require('torrent-search-api');
 
@@ -13,10 +13,21 @@ if (TORRENT_MIRRORS['1337x']?.length) {
 }
 
 // Enable Providers for library-based search
+// NOTE: We no longer enable 'Eztv' here because we have a dedicated, resilient function for it.
 TorrentSearchApi.enableProvider('1337x');
 TorrentSearchApi.enableProvider('Torrentz2');
 TorrentSearchApi.enableProvider('Yts');
-TorrentSearchApi.enableProvider('Eztv');
+
+// A list of common "bonus" words that are not part of the core title
+const BONUS_WORDS = new Set([
+  'hd', 'sd', '4k', '8k', 'uhd', 'fhd',
+  '1080p', '720p', '480p', '2120p',
+  'bluray', 'blu-ray', 'dvd', 'dvdrip', 'webrip', 'web-dl', 'hdrip',
+  'x264', 'h264', 'x265', 'h265', 'hevc',
+  'ac3', 'dts', 'dts-hd', 'truehd',
+  '5.1', '7.1',
+  'remux', 'repack', 'proper', 'internal'
+]);
 
 // ---------- YTS Direct Search ----------
 async function searchYTS(query) {
@@ -44,27 +55,53 @@ async function searchYTS(query) {
   }
 }
 
-// ---------- EZTV Direct Search ----------
+// ---------- Resilient EZTV Search (NEW AND IMPROVED) ----------
 async function searchEZTV(query) {
+  // Method 1: Try the original direct API call first.
   try {
     const rsp = await axios.get(
       `${TORRENT_APIS.EZTV_URL}?limit=100&keyword=${encodeURIComponent(query)}`
     );
     const torrents = rsp.data?.torrents || [];
-    return torrents.map(t => ({
-      name: t.title,
-      size: (t.size_bytes / (1024 * 1024)).toFixed(2) + ' MB',
-      seeders: t.seeds || 0,
-      leechers: t.peers || 0,
-      link: `https://eztv.re/ep/${t.id}/`,
-      provider: 'EZTV',
-      magnetLink: t.magnet_url
-    }));
+    if (torrents.length > 0) {
+      console.log(`✅ EZTV results from direct API call.`);
+      return torrents.map(t => ({
+        name: t.title,
+        size: (t.size_bytes / (1024 * 1024)).toFixed(2) + ' MB',
+        seeders: t.seeds || 0,
+        leechers: t.peers || 0,
+        link: `https://eztv.re/ep/${t.id}/`,
+        provider: 'EZTV',
+        magnetLink: t.magnet_url
+      }));
+    }
   } catch (err) {
-    console.error('EZTV search failed:', err.message);
-    return [];
+    console.warn(`⚠️ EZTV direct API call failed: ${err.message}`);
   }
+
+  // Method 2: Fallback to the torrent-search-api library if the first method fails.
+  try {
+    const torrents = await TorrentSearchApi.search(['Eztv'], query, 'All', 50);
+     if (torrents.length > 0) {
+        console.log(`✅ EZTV results from torrent-search-api library.`);
+        return torrents.map(t => ({
+            name: t.title,
+            size: t.size,
+            seeders: t.seeds || 0,
+            leechers: t.peers || 0,
+            link: t.desc,
+            provider: 'EZTV', // Ensure provider is set correctly
+            magnetLink: t.magnet || ''
+        }));
+    }
+  } catch (err) {
+    console.warn(`⚠️ EZTV library search failed: ${err.message}`);
+  }
+  
+  console.error('❌ All EZTV search methods failed for query:', query);
+  return [];
 }
+
 
 // ---------- PirateBay Direct Scraper ----------
 async function searchPirateBay(query) {
@@ -138,23 +175,71 @@ class TorrentSearchService {
   async search(query) {
     if (!query) return [];
 
-    const results = await Promise.allSettled([
-      searchYTS(query),
-      searchEZTV(query),
-      searchLibrary(query),
-      searchPirateBay(query) // 👈 NOW DIRECTLY SCRAPED
-    ]);
+    // --- NEW MULTI-SEARCH LOGIC ---
+    const queriesToRun = new Set();
+    const trimmedQuery = query.trim();
+    queriesToRun.add(trimmedQuery);
+
+    const spacelessQuery = trimmedQuery.replace(/\s+/g, '');
+    if (spacelessQuery && spacelessQuery !== trimmedQuery) {
+      queriesToRun.add(spacelessQuery);
+    }
+
+    const searchPromises = [];
+    for (const q of queriesToRun) {
+      searchPromises.push(searchYTS(q));
+      searchPromises.push(searchEZTV(q)); // Using our new resilient function
+      searchPromises.push(searchLibrary(q));
+      searchPromises.push(searchPirateBay(q));
+    }
+
+    const results = await Promise.allSettled(searchPromises);
 
     const all = results
       .filter(r => r.status === 'fulfilled' && r.value)
       .flatMap(r => r.value);
+    // --- END OF NEW LOGIC ---
 
-    all.sort((a, b) => (b.seeders || 0) - (a.seeders || 0));
 
-    // Deduplicate
+    // --- DEFINITIVE SOLUTION WITH ADVANCED RELEVANCE SCORING ---
+    const searchWords = query.toLowerCase().split(' ').filter(word => word);
+    const preciseQuery = searchWords.filter(word => !BONUS_WORDS.has(word)).join('');
+    const coreKeywords = searchWords.filter(word => !BONUS_WORDS.has(word) && !['a', 'an', 'the'].includes(word));
+
+    const processedTorrents = all
+      .map(torrent => {
+        const spacelessTitle = torrent.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const isMatch = coreKeywords.every(word => spacelessTitle.includes(word));
+
+        if (!isMatch) {
+          return null;
+        }
+
+        let relevance = 0;
+        for (const word of searchWords) {
+          if (spacelessTitle.includes(word)) {
+            relevance++;
+          }
+        }
+        if (spacelessTitle.includes(preciseQuery)) {
+          relevance += 10;
+        }
+
+        return { ...torrent, relevance };
+      })
+      .filter(Boolean);
+
+    const filteredAndSorted = processedTorrents.sort((a, b) => {
+      if (b.seeders !== a.seeders) {
+        return b.seeders - a.seeders;
+      }
+      return b.relevance - a.relevance;
+    });
+
+
     const seen = new Set();
     const unique = [];
-    for (const tor of all) {
+    for (const tor of filteredAndSorted) {
       const key = tor.name.toLowerCase().replace(/[^\w\s]/g, '').trim();
       if (!seen.has(key)) {
         seen.add(key);
@@ -182,7 +267,6 @@ class TorrentSearchService {
       const magnet = await TorrentSearchApi.getMagnet(torrent);
       if (magnet) return magnet;
 
-      // --- 1337x Magnet Fallback ---
       if (torrent.link && torrent.provider === '1337x') {
         try {
           const page = await cloudscraper.get(torrent.link, {
@@ -197,7 +281,6 @@ class TorrentSearchService {
         }
       }
 
-      // --- PirateBay Magnet Fallback ---
       if (torrent.link && torrent.provider === 'ThePirateBay') {
         try {
           const page = await axios.get(torrent.link, {
