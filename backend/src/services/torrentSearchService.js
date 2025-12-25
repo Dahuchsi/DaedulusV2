@@ -13,7 +13,6 @@ if (TORRENT_MIRRORS['1337x']?.length) {
 }
 
 // Enable Providers for library-based search
-// NOTE: We no longer enable 'Eztv' here because we have a dedicated, resilient function for it.
 TorrentSearchApi.enableProvider('1337x');
 TorrentSearchApi.enableProvider('Torrentz2');
 TorrentSearchApi.enableProvider('Yts');
@@ -28,6 +27,58 @@ const BONUS_WORDS = new Set([
   '5.1', '7.1',
   'remux', 'repack', 'proper', 'internal'
 ]);
+
+// ---------- Helper: Metadata Parser ----------
+function parseMetadata(title) {
+  const lowerTitle = title.toLowerCase();
+
+  // 1. Extract Quality
+  let quality = 'Unknown';
+  if (lowerTitle.includes('2160p') || lowerTitle.includes('4k')) quality = '2160p';
+  else if (lowerTitle.includes('1080p')) quality = '1080p';
+  else if (lowerTitle.includes('720p')) quality = '720p';
+  else if (lowerTitle.includes('480p')) quality = '480p';
+
+  // 2. Extract Season & Episode
+  // Common patterns: S01E01, 1x01, Season 1 Episode 1
+  let season = null;
+  let episode = null;
+
+  const sxE_Regex = /[Ss](\d{1,2})[Ee](\d{1,3})/i;
+  const sxE_Match = title.match(sxE_Regex);
+
+  if (sxE_Match) {
+    season = parseInt(sxE_Match[1], 10);
+    episode = parseInt(sxE_Match[2], 10);
+  } else {
+    // Try "Season X"
+    const seasonRegex = /Season\s?(\d{1,2})/i;
+    const seasonMatch = title.match(seasonRegex);
+    if (seasonMatch) {
+      season = parseInt(seasonMatch[1], 10);
+    }
+  }
+
+  // 3. Detect "Complete Season" or "Season Pack"
+  // If it has a season but no specific episode (or explicitly says "Complete"), it's likely a pack.
+  // HOWEVER, some single episodes might just say "S01" if poorly named, but usually "S01E01".
+  // Strong indicators: "Complete", "Season Pack", "S01 " (without E), "Season 1 " (without Episode)
+  let isCompleteSeason = false;
+  if (season !== null && episode === null) {
+      isCompleteSeason = true;
+  }
+  // Explicit overrides
+  if (lowerTitle.includes('complete') || lowerTitle.includes('pack') || lowerTitle.includes('season bundle')) {
+    if (season !== null) isCompleteSeason = true;
+  }
+
+  // If it matches S01E01, it is definitely NOT a complete season (unless it's a multi-episode file, but usually handled as episode)
+  if (episode !== null) {
+    isCompleteSeason = false;
+  }
+
+  return { season, episode, quality, isCompleteSeason };
+}
 
 // ---------- YTS Direct Search ----------
 async function searchYTS(query) {
@@ -55,16 +106,14 @@ async function searchYTS(query) {
   }
 }
 
-// ---------- Resilient EZTV Search (NEW AND IMPROVED) ----------
+// ---------- Resilient EZTV Search ----------
 async function searchEZTV(query) {
-  // Method 1: Try the original direct API call first.
   try {
     const rsp = await axios.get(
       `${TORRENT_APIS.EZTV_URL}?limit=100&keyword=${encodeURIComponent(query)}`
     );
     const torrents = rsp.data?.torrents || [];
     if (torrents.length > 0) {
-      console.log(`✅ EZTV results from direct API call.`);
       return torrents.map(t => ({
         name: t.title,
         size: (t.size_bytes / (1024 * 1024)).toFixed(2) + ' MB',
@@ -79,26 +128,22 @@ async function searchEZTV(query) {
     console.warn(`⚠️ EZTV direct API call failed: ${err.message}`);
   }
 
-  // Method 2: Fallback to the torrent-search-api library if the first method fails.
   try {
     const torrents = await TorrentSearchApi.search(['Eztv'], query, 'All', 50);
      if (torrents.length > 0) {
-        console.log(`✅ EZTV results from torrent-search-api library.`);
         return torrents.map(t => ({
             name: t.title,
             size: t.size,
             seeders: t.seeds || 0,
             leechers: t.peers || 0,
             link: t.desc,
-            provider: 'EZTV', // Ensure provider is set correctly
+            provider: 'EZTV',
             magnetLink: t.magnet || ''
         }));
     }
   } catch (err) {
     console.warn(`⚠️ EZTV library search failed: ${err.message}`);
   }
-  
-  console.error('❌ All EZTV search methods failed for query:', query);
   return [];
 }
 
@@ -139,10 +184,7 @@ async function searchPirateBay(query) {
       });
 
       if (torrents.length > 0) {
-        console.log(`✅ PirateBay results from: ${baseUrl}`);
         return torrents;
-      } else {
-        console.warn(`⚠️ No results from ${baseUrl}, trying next mirror...`);
       }
     } catch (err) {
       console.warn(`❌ PirateBay mirror failed: ${baseUrl} (${err.message})`);
@@ -151,7 +193,7 @@ async function searchPirateBay(query) {
   return [];
 }
 
-// ---------- Torrent-Search-API Search (1337x, Torrentz2 etc.) ----------
+// ---------- Torrent-Search-API Search ----------
 async function searchLibrary(query) {
   try {
     const torrents = await TorrentSearchApi.search(query, 'All', 50);
@@ -175,7 +217,7 @@ class TorrentSearchService {
   async search(query) {
     if (!query) return [];
 
-    // --- NEW MULTI-SEARCH LOGIC ---
+    // --- SEARCH LOGIC ---
     const queriesToRun = new Set();
     const trimmedQuery = query.trim();
     queriesToRun.add(trimmedQuery);
@@ -188,7 +230,7 @@ class TorrentSearchService {
     const searchPromises = [];
     for (const q of queriesToRun) {
       searchPromises.push(searchYTS(q));
-      searchPromises.push(searchEZTV(q)); // Using our new resilient function
+      searchPromises.push(searchEZTV(q));
       searchPromises.push(searchLibrary(q));
       searchPromises.push(searchPirateBay(q));
     }
@@ -198,16 +240,21 @@ class TorrentSearchService {
     const all = results
       .filter(r => r.status === 'fulfilled' && r.value)
       .flatMap(r => r.value);
-    // --- END OF NEW LOGIC ---
 
-
-    // --- DEFINITIVE SOLUTION WITH ADVANCED RELEVANCE SCORING ---
+    // --- SCORING & PARSING ---
     const searchWords = query.toLowerCase().split(' ').filter(word => word);
     const preciseQuery = searchWords.filter(word => !BONUS_WORDS.has(word)).join('');
     const coreKeywords = searchWords.filter(word => !BONUS_WORDS.has(word) && !['a', 'an', 'the'].includes(word));
 
+    // Check if user specifically requested "Full" or "Complete"
+    const userWantsFullSeason = query.toLowerCase().includes('full') || query.toLowerCase().includes('complete');
+
     const processedTorrents = all
       .map(torrent => {
+        // 1. Parse Metadata
+        const metadata = parseMetadata(torrent.name);
+
+        // 2. Basic Relevance Check
         const spacelessTitle = torrent.name.toLowerCase().replace(/[^a-z0-9]/g, '');
         const isMatch = coreKeywords.every(word => spacelessTitle.includes(word));
 
@@ -215,7 +262,10 @@ class TorrentSearchService {
           return null;
         }
 
+        // 3. Score Calculation
         let relevance = 0;
+
+        // Word match score
         for (const word of searchWords) {
           if (spacelessTitle.includes(word)) {
             relevance++;
@@ -225,15 +275,37 @@ class TorrentSearchService {
           relevance += 10;
         }
 
-        return { ...torrent, relevance };
+        // Boost for Complete Season if it looks like a series
+        if (metadata.isCompleteSeason) {
+            relevance += 20; // Big boost for seasons
+            if (userWantsFullSeason) {
+                relevance += 50; // Massive boost if explicitly requested
+            }
+        }
+
+        // Boost for High Quality
+        if (metadata.quality === '2160p') relevance += 5;
+        if (metadata.quality === '1080p') relevance += 3;
+
+        return {
+            ...torrent,
+            relevance,
+            ...metadata // attach season, episode, quality, isCompleteSeason
+        };
       })
       .filter(Boolean);
 
+    // Sort:
+    // 1. If looking for movie/general, seeders might be king.
+    // 2. If series, we want bundles top.
     const filteredAndSorted = processedTorrents.sort((a, b) => {
-      if (b.seeders !== a.seeders) {
-        return b.seeders - a.seeders;
+      // Prioritize explicit "Complete Season" if detected and score is high
+      if (Math.abs(a.relevance - b.relevance) > 10) {
+           return b.relevance - a.relevance;
       }
-      return b.relevance - a.relevance;
+
+      // Otherwise fallback to seeders
+      return b.seeders - a.seeders;
     });
 
 
