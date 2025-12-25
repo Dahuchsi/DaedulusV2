@@ -3,17 +3,24 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 // Use AuthContext for user info:
 import { useAuth } from '../contexts/AuthContext';
+// Use SearchContext for global state:
+import { useSearch } from '../contexts/SearchContext';
+
 import { organizeResults, TorrentResult } from '../utils/torrentUtils';
 import SeasonBundleItem from '../components/search/SeasonBundleItem';
 
 const Search: React.FC = () => {
     const navigate = useNavigate();
-    const { user } = useAuth(); // Use AuthContext for user info
-    const [query, setQuery] = useState('');
-    const [results, setResults] = useState<TorrentResult[]>([]);
+    const { user } = useAuth();
+
+    // Replace local state with Context state
+    const { query, setQuery, results, setResults, searched, setSearched } = useSearch();
+
     const [loading, setLoading] = useState(false);
-    const [searched, setSearched] = useState(false);
+
+    // Local state for history (could be moved to context but fine here as it's just pills)
     const [searchHistory, setSearchHistory] = useState<string[]>([]);
+
     const [downloading, setDownloading] = useState<Set<string>>(new Set());
     const [showFileTypeSelector, setShowFileTypeSelector] = useState(false);
 
@@ -38,10 +45,19 @@ const Search: React.FC = () => {
                 console.error('Failed to parse search history:', error);
             }
         }
-        const lastQuery = localStorage.getItem('lastSearchQuery');
-        if (lastQuery) {
-            setQuery(lastQuery);
+
+        // Only load last query if context is empty (first load)
+        if (!query) {
+            const lastQuery = localStorage.getItem('lastSearchQuery');
+            if (lastQuery) {
+                setQuery(lastQuery);
+                // Optional: Auto-search on reload?
+                // User said "persist search results".
+                // Context handles persistence during session.
+                // If this is a fresh reload (Context empty), we just restore the query string for convenience.
+            }
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Save search to history
@@ -94,6 +110,7 @@ const Search: React.FC = () => {
 
         setLoading(true);
         setSearched(true);
+        setResults([]); // Clear previous results while loading
 
         // Save to history and log
         saveToHistory(queryToSearch);
@@ -142,12 +159,7 @@ const Search: React.FC = () => {
                 torrentInfo: result,
                 fileType: selectedFileType
             });
-            // Don't navigate away for better UX if downloading multiple things,
-            // but for single download maybe notification is enough?
-            // The original code navigated to /downloads. Let's keep that for single download flow?
-            // Actually, if we want to stay on search page, we should just show a toast.
-            // But let's stick to original behavior for single items for now, or maybe make it optional.
-            // Given the requirement is "Download All", staying on page is better.
+            // Stay on page as per previous request
             alert(`Queued: ${result.name}`);
         } catch (error: any) {
             alert(`Failed to queue download: ${error.response?.data?.error || error.message}`);
