@@ -14,6 +14,32 @@ export interface TorrentResult {
     quality?: string;
     isCompleteSeason?: boolean;
     relevance?: number;
+
+    // TMDB Metadata
+    tmdb?: {
+        name?: string;
+        title?: string;
+        poster_url?: string | null;
+        backdrop_url?: string | null;
+        media_type?: string;
+        year?: string;
+        overview?: string;
+    };
+
+    // Library Status
+    libraryStatus?: {
+        exists: boolean;
+        isSeriesMatch?: boolean;
+        details?: {
+            video_resolution?: string;
+            video_codec?: string;
+            audio_codec?: string;
+            audio_channels?: string;
+            container?: string;
+            file_size?: number;
+            full_title?: string;
+        };
+    };
 }
 
 export interface EpisodeGroup {
@@ -32,6 +58,7 @@ export interface SearchResultGroup {
     movies: TorrentResult[];
     seasons: { [key: number]: SeasonBundle }; // Keyed by Season Number
     misc: TorrentResult[]; // Uncategorized
+    tmdbMetadata?: TorrentResult['tmdb']; // Top level metadata
 }
 
 const QUALITY_RANKING = ['2160p', '1080p', '720p', '480p', 'Unknown'];
@@ -48,17 +75,13 @@ export const organizeResults = (results: TorrentResult[]): SearchResultGroup => 
     const groups: SearchResultGroup = {
         movies: [],
         seasons: {},
-        misc: []
+        misc: [],
+        tmdbMetadata: results.length > 0 ? results[0].tmdb : undefined
     };
 
     results.forEach(result => {
         // 1. Check if it looks like a Movie (no season/episode info)
-        // Note: Sometimes movies have "2023" which might be parsed as something else,
-        // but our backend parser specifically looks for SxxExx or "Season X".
-        // If no season info is found, treat as Movie/Misc.
         if (result.season === null || result.season === undefined) {
-             // If it has no season info, we treat it as a movie or miscellaneous file.
-             // We could further refine this by checking for "S01" etc again, but backend does that.
              groups.movies.push(result);
              return;
         }
@@ -83,10 +106,6 @@ export const organizeResults = (results: TorrentResult[]): SearchResultGroup => 
             // 3. It's an Episode
             const epNum = result.episode;
 
-            // Initialize Episode Group if not exists
-            // We use the episode number as index, but it might be sparse (e.g. we have Ep 1 and Ep 5)
-            // So we might want to store it in a way that allows sorting later.
-            // For now, let's look it up.
             let epGroup = bundle.episodes.find(g => g.episode === epNum);
             if (!epGroup) {
                 epGroup = {
@@ -99,10 +118,6 @@ export const organizeResults = (results: TorrentResult[]): SearchResultGroup => 
 
             epGroup.torrents.push(result);
         } else {
-             // Has season but no episode and not marked as complete pack?
-             // Maybe a weird edge case, put in complete packs for now or misc.
-             // If the backend marked it isCompleteSeason=false but no episode, it's ambiguous.
-             // We'll treat it as a potential pack or misc.
              bundle.completePacks.push(result);
         }
     });
@@ -128,8 +143,6 @@ export const organizeResults = (results: TorrentResult[]): SearchResultGroup => 
                 return b.seeders - a.seeders; // Then seeders
             });
 
-            // Default selection: Best Quality with at least some seeds?
-            // Or just top of the list.
             if (ep.torrents.length > 0) {
                 ep.selectedTorrent = ep.torrents[0];
             }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SeasonBundle, TorrentResult, EpisodeGroup } from '../../utils/torrentUtils';
 import EpisodeRow from './EpisodeRow';
+import LibraryStatusBadge from './LibraryStatusBadge';
 
 interface SeasonBundleItemProps {
     bundle: SeasonBundle;
@@ -10,15 +11,7 @@ interface SeasonBundleItemProps {
 
 const SeasonBundleItem: React.FC<SeasonBundleItemProps> = ({ bundle, onDownloadBundle, onDownloadSingle }) => {
     const [expanded, setExpanded] = useState(false);
-
-    // We maintain local state for selections within this bundle component
-    // effectively "Virtual Bundle" state
     const [episodeSelections, setEpisodeSelections] = useState<{ [epNum: number]: TorrentResult }>({});
-
-    // Initialize selections if needed (though usually passed down, but for interactivity we might want local override)
-    // Actually, `bundle.episodes` has `selectedTorrent` which was set by our util.
-    // But if we want to allow the user to change it without mutating the global search result deeply,
-    // we can use local state.
 
     const getSelectedTorrent = (epGroup: EpisodeGroup) => {
         return episodeSelections[epGroup.episode] || epGroup.selectedTorrent;
@@ -39,8 +32,6 @@ const SeasonBundleItem: React.FC<SeasonBundleItemProps> = ({ bundle, onDownloadB
         if (torrentsToDownload.length === 0) return;
         onDownloadBundle(torrentsToDownload);
     };
-
-    const topPack = bundle.completePacks.length > 0 ? bundle.completePacks[0] : null;
 
     return (
         <div className="season-bundle" style={{
@@ -93,8 +84,9 @@ const SeasonBundleItem: React.FC<SeasonBundleItemProps> = ({ bundle, onDownloadB
                                     padding: '0.5rem',
                                     borderBottom: '1px solid #eee'
                                 }}>
-                                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>
+                                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <strong>{pack.name}</strong>
+                                        <LibraryStatusBadge status={pack.libraryStatus} />
                                         <div style={{ fontSize: '0.8rem' }}>
                                             Size: {pack.size} • S: {pack.seeders} • L: {pack.leechers} • {pack.quality}
                                         </div>
@@ -128,13 +120,42 @@ const SeasonBundleItem: React.FC<SeasonBundleItemProps> = ({ bundle, onDownloadB
                             </div>
 
                             <div style={{ border: '1px solid #eee', borderRadius: '4px' }}>
-                                {bundle.episodes.map(epGroup => (
-                                    <EpisodeRow
-                                        key={epGroup.episode}
-                                        group={{...epGroup, selectedTorrent: getSelectedTorrent(epGroup)}}
-                                        onSelectionChange={handleSelectionChange}
-                                    />
-                                ))}
+                                {bundle.episodes.map(epGroup => {
+                                    const selected = getSelectedTorrent(epGroup);
+
+                                    // Determine Row Color
+                                    // Green: On Plex
+                                    // Orange: Upgrade (if we had comparison logic, assuming naive for now)
+                                    // Red: Missing (Not on Plex)
+
+                                    let borderColor = 'transparent'; // Default
+                                    let bgColor = 'transparent';
+
+                                    // Check if ANY torrent for this episode is on plex? Or just the selected one?
+                                    // The user said: "Green if in the season pack that already exists"
+                                    // If we have "Power S02E01" in library, then this row is Green.
+                                    // Our `libraryStatus` is attached to the TorrentResult.
+                                    // So we check the selected torrent's status.
+
+                                    if (selected?.libraryStatus?.exists) {
+                                        // It exists.
+                                        borderColor = '#4caf50'; // Green
+                                        bgColor = '#e8f5e9';
+                                    } else {
+                                        // Missing
+                                        borderColor = '#ef5350'; // Red
+                                        bgColor = '#ffebee';
+                                    }
+
+                                    return (
+                                        <div key={epGroup.episode} style={{ borderLeft: `4px solid ${borderColor}`, backgroundColor: bgColor }}>
+                                            <EpisodeRow
+                                                group={{...epGroup, selectedTorrent: selected}}
+                                                onSelectionChange={handleSelectionChange}
+                                            />
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

@@ -8,6 +8,7 @@ import { useSearch } from '../contexts/SearchContext';
 
 import { organizeResults, TorrentResult } from '../utils/torrentUtils';
 import SeasonBundleItem from '../components/search/SeasonBundleItem';
+import LibraryStatusBadge from '../components/search/LibraryStatusBadge';
 
 const Search: React.FC = () => {
     const navigate = useNavigate();
@@ -51,10 +52,6 @@ const Search: React.FC = () => {
             const lastQuery = localStorage.getItem('lastSearchQuery');
             if (lastQuery) {
                 setQuery(lastQuery);
-                // Optional: Auto-search on reload?
-                // User said "persist search results".
-                // Context handles persistence during session.
-                // If this is a fresh reload (Context empty), we just restore the query string for convenience.
             }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -224,6 +221,9 @@ const Search: React.FC = () => {
         }
     };
 
+    // TMDB Metadata Header
+    const tmdbMeta = organizedResults.tmdbMetadata;
+
     return (
         <div className="search-page main-content">
             <h1>Search Torrents</h1>
@@ -271,15 +271,45 @@ const Search: React.FC = () => {
                 </button>
             </form>
 
+            {/* TMDB Header Section */}
+            {tmdbMeta && results.length > 0 && (
+                <div className="tmdb-header" style={{
+                    display: 'flex',
+                    gap: '20px',
+                    marginBottom: '20px',
+                    padding: '20px',
+                    backgroundColor: '#fff',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                    alignItems: 'flex-start'
+                }}>
+                    {tmdbMeta.poster_url && (
+                        <img
+                            src={tmdbMeta.poster_url}
+                            alt={tmdbMeta.title || tmdbMeta.name}
+                            style={{ width: '100px', borderRadius: '4px' }}
+                        />
+                    )}
+                    <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <h2 style={{ margin: 0 }}>{tmdbMeta.title || tmdbMeta.name}</h2>
+                            {tmdbMeta.year && <span className="badge" style={{ backgroundColor: '#e5e7eb', color: '#374151' }}>{tmdbMeta.year}</span>}
+                            {tmdbMeta.media_type && <span className="badge" style={{ textTransform: 'uppercase' }}>{tmdbMeta.media_type}</span>}
+                        </div>
+                        {tmdbMeta.overview && (
+                            <p style={{ marginTop: '10px', color: '#4b5563', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                                {tmdbMeta.overview}
+                            </p>
+                        )}
+                    </div>
+                </div>
+            )}
+
             <div className="search-results">
                 {loading ? (
                     <p>Loading results...</p>
                 ) : results.length > 0 ? (
                     <>
-                        <div style={{ marginBottom: '1rem', color: '#6b7280', fontSize: '0.9rem' }}>
-                            Found {results.length} results for "{query}"
-                        </div>
-
                         {/* 1. Render Season Bundles */}
                         {Object.values(organizedResults.seasons)
                             .sort((a, b) => a.season - b.season)
@@ -299,7 +329,10 @@ const Search: React.FC = () => {
                                 {organizedResults.movies.map((result, index) => (
                                     <div key={`${result.provider}-${result.name}-${index}`} className="result-item">
                                         <div className="result-info">
-                                            <h3>{result.name}</h3>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <h3>{result.name}</h3>
+                                                <LibraryStatusBadge status={result.libraryStatus} />
+                                            </div>
                                             <div className="result-details">
                                                 <span>Size: {result.size}</span>
                                                 <span>Seeders: {result.seeders}</span>
@@ -321,9 +354,6 @@ const Search: React.FC = () => {
                                 ))}
                             </div>
                         )}
-
-                        {/* 3. Render Misc/Uncategorized if any (Usually movies array covers it, but strict check) */}
-                        {/* The util puts everything non-season into movies array for simplicity, so we are good. */}
                     </>
                 ) : searched ? (
                     <div className="no-results">

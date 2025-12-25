@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-const DEFAULT_AVATAR = '/uploads/avatars/default.png';
+const DEFAULT_AVATAR = '/default-avatar.png';
 
 const Navbar: React.FC = () => {
     const { user, logout } = useAuth();
