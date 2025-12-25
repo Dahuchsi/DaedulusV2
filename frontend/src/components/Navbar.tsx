@@ -25,6 +25,9 @@ const Navbar: React.FC = () => {
                 <Link to="/search" className={isActive('/search') ? 'active' : ''}>
                     Search
                 </Link>
+                <Link to="/trending" className={isActive('/trending') ? 'active' : ''}>
+                    Trending
+                </Link>
                 <Link to="/downloads" className={isActive('/downloads') ? 'active' : ''}>
                     Downloads
                 </Link>

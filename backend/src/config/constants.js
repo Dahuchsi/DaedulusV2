@@ -34,7 +34,9 @@ module.exports = {
       'https://x1337x.st',
       'https://x1337x.se',
       'https://1337x.so',
-      'https://1337x.st'
+      'https://1337x.st',
+      'https://1337x.is',
+      'https://1337x.xyz'
     ],
     'ThePirateBay': [
       'https://tpb.party',
@@ -51,6 +53,9 @@ module.exports = {
   // TMDB
   TMDB_API_KEY: process.env.TMDB_API_KEY || '1ca3efda731f9b20af5f948ace2f7a3d',
   TMDB_READ_TOKEN: process.env.TMDB_READ_ACCESS_TOKEN || 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxY2EzZWZkYTczMWY5YjIwYWY1Zjk0OGFjZTJmN2EzZCIsIm5iZiI6MTc2NDM4MDg4NC40MTYsInN1YiI6IjY5MmE1MGQ0YjlmZWJhODEzMGI4ZWU1NyIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.nQJmm2PBun5VTqYX6ZeTmqocVVxo8QDjzw5yG573yi0',
+
+  // Watchmode
+  WATCHMODE_API_KEY: process.env.WATCHMODE_API_KEY || 'Y0la7T1tEfP3WI3KfriACU0TPnjaydMqxRzeZF0Y',
 
   // Tautulli
   TAUTULLI_URL: process.env.TAUTULLI_URL || 'http://localhost:8181',

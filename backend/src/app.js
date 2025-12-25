@@ -44,6 +44,7 @@ app.use('/api/downloads', require('./routes/download'));
 app.use('/api/messages', require('./routes/message'));
 app.use('/api/profile', require('./routes/user'));
 app.use('/api/requests', require('./routes/request'));
+app.use('/api/trending', require('./routes/trending'));
 app.use('/api/admin', require('./routes/admin'));
 
 // --- Frontend Catch-all ---
