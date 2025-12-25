@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SeasonBundle, TorrentResult, EpisodeGroup } from '../../utils/torrentUtils';
+import { SeasonBundle, TorrentResult, EpisodeGroup, isBetterQuality } from '../../utils/torrentUtils';
 import EpisodeRow from './EpisodeRow';
 import LibraryStatusBadge from './LibraryStatusBadge';
 
@@ -124,26 +124,26 @@ const SeasonBundleItem: React.FC<SeasonBundleItemProps> = ({ bundle, onDownloadB
                                     const selected = getSelectedTorrent(epGroup);
 
                                     // Determine Row Color
-                                    // Green: On Plex
-                                    // Orange: Upgrade (if we had comparison logic, assuming naive for now)
-                                    // Red: Missing (Not on Plex)
-
-                                    let borderColor = 'transparent'; // Default
+                                    let borderColor = 'transparent';
                                     let bgColor = 'transparent';
 
-                                    // Check if ANY torrent for this episode is on plex? Or just the selected one?
-                                    // The user said: "Green if in the season pack that already exists"
-                                    // If we have "Power S02E01" in library, then this row is Green.
-                                    // Our `libraryStatus` is attached to the TorrentResult.
-                                    // So we check the selected torrent's status.
-
                                     if (selected?.libraryStatus?.exists) {
-                                        // It exists.
-                                        borderColor = '#4caf50'; // Green
-                                        bgColor = '#e8f5e9';
+                                        // Check for Upgrade
+                                        const torrentQuality = selected.quality;
+                                        const libraryQuality = selected.libraryStatus.details?.video_resolution;
+
+                                        if (isBetterQuality(torrentQuality, libraryQuality)) {
+                                            // Upgrade Available -> Orange
+                                            borderColor = '#ff9800';
+                                            bgColor = '#fff3e0';
+                                        } else {
+                                            // Already have equal or better -> Green
+                                            borderColor = '#4caf50';
+                                            bgColor = '#e8f5e9';
+                                        }
                                     } else {
-                                        // Missing
-                                        borderColor = '#ef5350'; // Red
+                                        // Missing -> Red
+                                        borderColor = '#ef5350';
                                         bgColor = '#ffebee';
                                     }
 

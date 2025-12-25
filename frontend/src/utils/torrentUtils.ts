@@ -63,11 +63,30 @@ export interface SearchResultGroup {
 
 const QUALITY_RANKING = ['2160p', '1080p', '720p', '480p', 'Unknown'];
 
+const normalizeQuality = (q: string | undefined): string => {
+    if (!q) return 'Unknown';
+    const lower = q.toLowerCase();
+    if (lower.includes('2160') || lower.includes('4k')) return '2160p';
+    if (lower.includes('1080')) return '1080p';
+    if (lower.includes('720')) return '720p';
+    if (lower.includes('480')) return '480p';
+    return 'Unknown';
+};
+
 // Helper to compare qualities
 export const compareQuality = (q1: string | undefined, q2: string | undefined) => {
-    const idx1 = QUALITY_RANKING.indexOf(q1 || 'Unknown');
-    const idx2 = QUALITY_RANKING.indexOf(q2 || 'Unknown');
-    return idx1 - idx2; // Lower index = Better quality
+    const norm1 = normalizeQuality(q1);
+    const norm2 = normalizeQuality(q2);
+
+    const idx1 = QUALITY_RANKING.indexOf(norm1);
+    const idx2 = QUALITY_RANKING.indexOf(norm2);
+    return idx1 - idx2; // Lower index = Better quality (0 is best)
+};
+
+export const isBetterQuality = (newQuality: string | undefined, currentQuality: string | undefined): boolean => {
+    if (!currentQuality) return false; // Can't upgrade from nothing (or unknown)
+    const comparison = compareQuality(newQuality, currentQuality);
+    return comparison < 0; // Negative means newQuality index is lower (better) than current
 };
 
 // Main grouping function
