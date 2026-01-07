@@ -4,6 +4,7 @@ const authMiddleware = require('../middleware/auth');
 
 router.get('/', authMiddleware, downloadController.getDownloads);
 router.post('/queue', authMiddleware, downloadController.queueDownload);
+router.post('/auto', authMiddleware, downloadController.autoQueue);
 router.get('/:id', authMiddleware, downloadController.getDownloadStatus);
 router.delete('/:id', authMiddleware, downloadController.deleteDownload);
 router.post('/:id/cancel', authMiddleware, downloadController.cancelDownload);

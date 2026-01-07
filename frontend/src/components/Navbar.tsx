@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-const DEFAULT_AVATAR = '/uploads/avatars/default.png';
+const DEFAULT_AVATAR = '/default-avatar.png';
 
 const Navbar: React.FC = () => {
     const { user, logout } = useAuth();
@@ -24,6 +24,9 @@ const Navbar: React.FC = () => {
                 </Link>
                 <Link to="/search" className={isActive('/search') ? 'active' : ''}>
                     Search
+                </Link>
+                <Link to="/trending" className={isActive('/trending') ? 'active' : ''}>
+                    Trending
                 </Link>
                 <Link to="/downloads" className={isActive('/downloads') ? 'active' : ''}>
                     Downloads

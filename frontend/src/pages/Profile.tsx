@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
-const DEFAULT_AVATAR = '/uploads/avatars/default.png';
+const DEFAULT_AVATAR = '/default-avatar.png';
 
 const Profile: React.FC = () => {
     const { user, updateUser } = useAuth();

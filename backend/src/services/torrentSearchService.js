@@ -3,6 +3,8 @@ const cloudscraper = require('cloudscraper');
 const cheerio = require('cheerio');
 const { TORRENT_APIS, TORRENT_MIRRORS } = require('../config/constants');
 const TorrentSearchApi = require('torrent-search-api');
+const tmdbService = require('./tmdbService');
+const tautulliService = require('./tautulliService');
 
 // ---------- 1337x Mirror Config ----------
 if (TORRENT_MIRRORS['1337x']?.length) {
@@ -13,9 +15,9 @@ if (TORRENT_MIRRORS['1337x']?.length) {
 }
 
 // Enable Providers for library-based search
-// NOTE: We no longer enable 'Eztv' here because we have a dedicated, resilient function for it.
 TorrentSearchApi.enableProvider('1337x');
 TorrentSearchApi.enableProvider('Torrentz2');
+// Yts usually works with custom function below, but we can enable it as backup
 TorrentSearchApi.enableProvider('Yts');
 
 // A list of common "bonus" words that are not part of the core title
@@ -29,42 +31,92 @@ const BONUS_WORDS = new Set([
   'remux', 'repack', 'proper', 'internal'
 ]);
 
-// ---------- YTS Direct Search ----------
-async function searchYTS(query) {
-  try {
-    const rsp = await axios.get(
-      `${TORRENT_APIS.YTS_URL}?query_term=${encodeURIComponent(query)}&sort_by=peers`
-    );
-    const movies = rsp.data?.data?.movies || [];
-    return movies.flatMap(movie =>
-      movie.torrents.map(t => ({
-        name: `${movie.title_long} [${t.quality}] [YTS]`,
-        size: t.size,
-        seeders: t.seeds || 0,
-        leechers: t.peers || 0,
-        link: movie.url,
-        provider: 'YTS',
-        magnetLink: `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(
-          movie.title_long
-        )}`
-      }))
-    );
-  } catch (err) {
-    console.error('YTS search failed:', err.message);
-    return [];
+// ---------- Helper: Metadata Parser ----------
+function parseMetadata(title) {
+  const lowerTitle = title.toLowerCase();
+
+  // 1. Extract Quality
+  let quality = 'Unknown';
+  if (lowerTitle.includes('2160p') || lowerTitle.includes('4k')) quality = '2160p';
+  else if (lowerTitle.includes('1080p')) quality = '1080p';
+  else if (lowerTitle.includes('720p')) quality = '720p';
+  else if (lowerTitle.includes('480p')) quality = '480p';
+
+  // 2. Extract Season & Episode
+  let season = null;
+  let episode = null;
+
+  const sxE_Regex = /[Ss](\d{1,2})[Ee](\d{1,3})/i;
+  const sxE_Match = title.match(sxE_Regex);
+
+  if (sxE_Match) {
+    season = parseInt(sxE_Match[1], 10);
+    episode = parseInt(sxE_Match[2], 10);
+  } else {
+    // Try "Season X"
+    const seasonRegex = /Season\s?(\d{1,2})/i;
+    const seasonMatch = title.match(seasonRegex);
+    if (seasonMatch) {
+      season = parseInt(seasonMatch[1], 10);
+    }
   }
+
+  // 3. Detect "Complete Season"
+  let isCompleteSeason = false;
+  if (season !== null && episode === null) {
+      isCompleteSeason = true;
+  }
+  if (lowerTitle.includes('complete') || lowerTitle.includes('pack') || lowerTitle.includes('season bundle')) {
+    if (season !== null) isCompleteSeason = true;
+  }
+  if (episode !== null) {
+    isCompleteSeason = false;
+  }
+
+  return { season, episode, quality, isCompleteSeason };
 }
 
-// ---------- Resilient EZTV Search (NEW AND IMPROVED) ----------
+// ---------- YTS Direct Search ----------
+async function searchYTS(query) {
+    // Try primary then mirrors
+    const mirrors = [TORRENT_APIS.YTS_URL, ...(TORRENT_APIS.YTS_MIRRORS || [])];
+
+    for (const mirror of mirrors) {
+        try {
+            const rsp = await axios.get(
+              `${mirror}?query_term=${encodeURIComponent(query)}&sort_by=peers`,
+              { timeout: 5000 }
+            );
+            const movies = rsp.data?.data?.movies || [];
+            if (movies.length > 0) {
+                 return movies.flatMap(movie =>
+                  movie.torrents.map(t => ({
+                    name: `${movie.title_long} [${t.quality}] [YTS]`,
+                    size: t.size,
+                    seeders: t.seeds || 0,
+                    leechers: t.peers || 0,
+                    link: movie.url,
+                    provider: 'YTS',
+                    magnetLink: `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(movie.title_long)}`
+                  }))
+                );
+            }
+        } catch (err) {
+            console.warn(`YTS mirror failed (${mirror}):`, err.message);
+        }
+    }
+    return [];
+}
+
+// ---------- Resilient EZTV Search ----------
 async function searchEZTV(query) {
-  // Method 1: Try the original direct API call first.
   try {
     const rsp = await axios.get(
-      `${TORRENT_APIS.EZTV_URL}?limit=100&keyword=${encodeURIComponent(query)}`
+      `${TORRENT_APIS.EZTV_URL}?limit=100&keyword=${encodeURIComponent(query)}`,
+      { timeout: 5000 }
     );
     const torrents = rsp.data?.torrents || [];
     if (torrents.length > 0) {
-      console.log(`✅ EZTV results from direct API call.`);
       return torrents.map(t => ({
         name: t.title,
         size: (t.size_bytes / (1024 * 1024)).toFixed(2) + ' MB',
@@ -79,26 +131,23 @@ async function searchEZTV(query) {
     console.warn(`⚠️ EZTV direct API call failed: ${err.message}`);
   }
 
-  // Method 2: Fallback to the torrent-search-api library if the first method fails.
   try {
+    // Fallback to library
     const torrents = await TorrentSearchApi.search(['Eztv'], query, 'All', 50);
      if (torrents.length > 0) {
-        console.log(`✅ EZTV results from torrent-search-api library.`);
         return torrents.map(t => ({
             name: t.title,
             size: t.size,
             seeders: t.seeds || 0,
             leechers: t.peers || 0,
             link: t.desc,
-            provider: 'EZTV', // Ensure provider is set correctly
+            provider: 'EZTV',
             magnetLink: t.magnet || ''
         }));
     }
   } catch (err) {
     console.warn(`⚠️ EZTV library search failed: ${err.message}`);
   }
-  
-  console.error('❌ All EZTV search methods failed for query:', query);
   return [];
 }
 
@@ -110,7 +159,8 @@ async function searchPirateBay(query) {
     try {
       const url = `${baseUrl}/search/${encodeURIComponent(query)}/1/99/0`;
       const { data } = await axios.get(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0' }
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 5000
       });
       const $ = cheerio.load(data);
 
@@ -139,10 +189,7 @@ async function searchPirateBay(query) {
       });
 
       if (torrents.length > 0) {
-        console.log(`✅ PirateBay results from: ${baseUrl}`);
         return torrents;
-      } else {
-        console.warn(`⚠️ No results from ${baseUrl}, trying next mirror...`);
       }
     } catch (err) {
       console.warn(`❌ PirateBay mirror failed: ${baseUrl} (${err.message})`);
@@ -151,7 +198,7 @@ async function searchPirateBay(query) {
   return [];
 }
 
-// ---------- Torrent-Search-API Search (1337x, Torrentz2 etc.) ----------
+// ---------- Torrent-Search-API Search ----------
 async function searchLibrary(query) {
   try {
     const torrents = await TorrentSearchApi.search(query, 'All', 50);
@@ -175,7 +222,10 @@ class TorrentSearchService {
   async search(query) {
     if (!query) return [];
 
-    // --- NEW MULTI-SEARCH LOGIC ---
+    const tmdbPromise = tmdbService.classifyQuery(query);
+    const libraryPromise = tautulliService.searchLibrary(query);
+
+    // --- TORRENT SEARCH ---
     const queriesToRun = new Set();
     const trimmedQuery = query.trim();
     queriesToRun.add(trimmedQuery);
@@ -188,26 +238,35 @@ class TorrentSearchService {
     const searchPromises = [];
     for (const q of queriesToRun) {
       searchPromises.push(searchYTS(q));
-      searchPromises.push(searchEZTV(q)); // Using our new resilient function
+      searchPromises.push(searchEZTV(q));
       searchPromises.push(searchLibrary(q));
       searchPromises.push(searchPirateBay(q));
     }
 
-    const results = await Promise.allSettled(searchPromises);
+    const [tmdbResult, libraryItems, ...searchResults] = await Promise.all([
+        tmdbPromise,
+        libraryPromise,
+        ...searchPromises
+    ]);
 
-    const all = results
-      .filter(r => r.status === 'fulfilled' && r.value)
-      .flatMap(r => r.value);
-    // --- END OF NEW LOGIC ---
+    const allTorrents = searchResults.flat();
 
-
-    // --- DEFINITIVE SOLUTION WITH ADVANCED RELEVANCE SCORING ---
+    // --- SCORING & PARSING ---
     const searchWords = query.toLowerCase().split(' ').filter(word => word);
     const preciseQuery = searchWords.filter(word => !BONUS_WORDS.has(word)).join('');
     const coreKeywords = searchWords.filter(word => !BONUS_WORDS.has(word) && !['a', 'an', 'the'].includes(word));
 
-    const processedTorrents = all
+    const userWantsFullSeason = query.toLowerCase().includes('full') || query.toLowerCase().includes('complete');
+
+    // TMDB Info
+    const { isMovie, isSeries, topResult } = tmdbResult;
+
+    const processedTorrents = allTorrents
       .map(torrent => {
+        // 1. Parse Metadata
+        const metadata = parseMetadata(torrent.name);
+
+        // 2. Basic Relevance Check
         const spacelessTitle = torrent.name.toLowerCase().replace(/[^a-z0-9]/g, '');
         const isMatch = coreKeywords.every(word => spacelessTitle.includes(word));
 
@@ -215,7 +274,10 @@ class TorrentSearchService {
           return null;
         }
 
+        // 3. Score Calculation
         let relevance = 0;
+
+        // Word match score
         for (const word of searchWords) {
           if (spacelessTitle.includes(word)) {
             relevance++;
@@ -225,17 +287,68 @@ class TorrentSearchService {
           relevance += 10;
         }
 
-        return { ...torrent, relevance };
+        // Boost for Complete Season if it looks like a series
+        if (metadata.isCompleteSeason) {
+            relevance += 20;
+            if (userWantsFullSeason) relevance += 50;
+            if (isSeries) relevance += 30; // Boost seasons if TMDB confirms it *can* be a show
+        }
+
+        // --- NEW LOGIC FOR HYBRID RESULTS ---
+        // If it's a Movie search AND Series search (ambiguous), we don't penalize.
+        // We just boost what we are sure about.
+
+        // Boost Movies if matches TMDB Movie result year?
+        if (isMovie && metadata.season === null) {
+            // It's likely a movie result
+            relevance += 10;
+        }
+
+        // Boost High Quality
+        if (metadata.quality === '2160p') relevance += 5;
+        if (metadata.quality === '1080p') relevance += 3;
+
+        // Check Library Status
+        let libraryStatus = null;
+
+        if (libraryItems.length > 0) {
+            const libMatch = libraryItems.find(item => {
+                return item.title.toLowerCase().includes(preciseQuery) || preciseQuery.includes(item.title.toLowerCase());
+            });
+
+            if (libMatch) {
+                 if (metadata.season === null && libMatch.media_type === 'movie') {
+                     libraryStatus = {
+                         exists: true,
+                         details: libMatch
+                     };
+                 }
+                 else if (metadata.season !== null && (libMatch.media_type === 'show' || libMatch.media_type === 'episode')) {
+                     libraryStatus = {
+                         exists: true,
+                         details: libMatch,
+                         isSeriesMatch: true
+                     };
+                 }
+            }
+        }
+
+        return {
+            ...torrent,
+            relevance,
+            ...metadata,
+            libraryStatus
+        };
       })
       .filter(Boolean);
 
+    // Sort
     const filteredAndSorted = processedTorrents.sort((a, b) => {
-      if (b.seeders !== a.seeders) {
-        return b.seeders - a.seeders;
+      if (Math.abs(a.relevance - b.relevance) > 10) {
+           return b.relevance - a.relevance;
       }
-      return b.relevance - a.relevance;
+      return b.seeders - a.seeders;
     });
-
 
     const seen = new Set();
     const unique = [];
@@ -245,6 +358,11 @@ class TorrentSearchService {
         seen.add(key);
         unique.push(tor);
       }
+    }
+
+    // Attach Top-Level Metadata
+    if (topResult && unique.length > 0) {
+        unique.forEach(t => t.tmdb = topResult);
     }
 
     console.log(
@@ -284,7 +402,8 @@ class TorrentSearchService {
       if (torrent.link && torrent.provider === 'ThePirateBay') {
         try {
           const page = await axios.get(torrent.link, {
-            headers: { 'User-Agent': 'Mozilla/5.0' }
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            timeout: 5000
           });
           const match = page.data.match(/magnet:\?xt=urn:btih:[a-zA-Z0-9]+/);
           if (match) return match[0];

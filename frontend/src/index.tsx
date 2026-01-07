@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { SocketProvider } from './contexts/SocketContext';
+import { SearchProvider } from './contexts/SearchContext';
 import App from './App';
 import './styles/main.css'; // Only import main.css
 import './styles/Messages.css'; // Keep the component-specific CSS
@@ -16,7 +17,9 @@ root.render(
     <BrowserRouter>
       <AuthProvider>
         <SocketProvider>
-          <App />
+          <SearchProvider>
+            <App />
+          </SearchProvider>
         </SocketProvider>
       </AuthProvider>
     </BrowserRouter>

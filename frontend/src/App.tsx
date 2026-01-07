@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Search from './pages/Search';
+import Trending from './pages/Trending';
 import Downloads from './pages/Downloads';
 import Messages from './pages/Messages';
 import Profile from './pages/Profile';
@@ -26,6 +27,7 @@ function App() {
                 <Route element={<Layout />}>
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/search" element={<Search />} />
+                    <Route path="/trending" element={<Trending />} />
                     <Route path="/downloads" element={<Downloads />} />
                     <Route path="/messages" element={<Messages />} />
                     <Route path="/profile" element={<Profile />} />
